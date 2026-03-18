@@ -65,7 +65,8 @@ miner_args() {
   local args="--wallet_name ${WALLET_NAME} \
     --wallet_hotkey ${hotkey} \
     --netuid ${NETUID} \
-    --subtensor_network ${NETWORK}"
+    --subtensor_network ${NETWORK} \
+    --no_qualify"
 
   if [ -n "${WALLET_PATH}" ]; then
     args="${args} --wallet_path ${WALLET_PATH}"

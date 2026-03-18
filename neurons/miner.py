@@ -2024,6 +2024,12 @@ async def _grpc_ready_check(addr: str, timeout: float = 5.0) -> bool:
 def main():
     parser = argparse.ArgumentParser(description="LeadPoet Miner")
     BaseMinerNeuron.add_args(parser)
+    parser.add_argument(
+        "--no_qualify",
+        action="store_true",
+        default=False,
+        help="Skip the qualification model submission prompt at startup (use for pm2 / non-interactive runs).",
+    )
     args = parser.parse_args()
 
     if args.logging_trace:
@@ -2161,8 +2167,13 @@ def main():
     print("")
     print("This is OPTIONAL. If you just want to mine leads, select 'N'.")
     print("")
-    
-    use_qualification = input("❓ Submit a qualification model? (Y/N): ").strip().upper()
+
+    # Non-interactive mode: skip prompt when running under pm2 / background process
+    if args.no_qualify or not sys.stdin.isatty():
+        use_qualification = "N"
+        print("✅ Skipping qualification prompt (--no_qualify or non-interactive mode).")
+    else:
+        use_qualification = input("❓ Submit a qualification model? (Y/N): ").strip().upper()
     
     if use_qualification == "Y":
         # Load wallet first (no network connection needed)
