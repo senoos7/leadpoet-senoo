@@ -3,7 +3,7 @@
 
 # Core dependencies
 httpx>=0.27.0
-openrouter>=1.0.0
+# openrouter package not used; Lead Sorcerer calls OpenRouter via the openai client
 firecrawl>=2.16.0
 openai>=1.0.0
 
