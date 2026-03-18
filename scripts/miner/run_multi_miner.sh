@@ -24,7 +24,20 @@ WALLET_NAME="${WALLET_NAME:-superbit-darnsin}"        # coldkey (shared)
 NETWORK="${NETWORK:-finney}"
 NETUID="${NETUID:-71}"
 WALLET_PATH="${WALLET_PATH:-}"             # if empty: use bittensor default
-MINER_SCRIPT="./neurons/miner.py"
+MINER_SCRIPT="neurons/miner.py"
+
+# Virtualenv — pm2 does NOT inherit your shell's venv automatically.
+# Set this to the full path of the Python inside your venv.
+# Default assumes venv/ is in the repo root next to this script.
+REPO_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+VENV_PYTHON="${VENV_PYTHON:-${REPO_ROOT}/venv/bin/python3}"
+
+if [ ! -x "${VENV_PYTHON}" ]; then
+  echo "Error: venv Python not found at ${VENV_PYTHON}"
+  echo "Create the venv with:  python3 -m venv ${REPO_ROOT}/venv && ${REPO_ROOT}/venv/bin/pip install -e ${REPO_ROOT}"
+  echo "Or override with:      VENV_PYTHON=/path/to/python ./run_multi_miner.sh start"
+  exit 1
+fi
 
 # ----------------------------------------------------------------
 # Miner definitions — edit this section for your hotkeys/names
@@ -74,15 +87,21 @@ start_all() {
     exit 1
   fi
 
-  export PYTHONPATH="$(pwd)"
+  export PYTHONPATH="${REPO_ROOT}"
+
+  echo "Using Python: ${VENV_PYTHON}"
+  echo "Repo root:    ${REPO_ROOT}"
+  echo ""
 
   for entry in "${MINERS[@]}"; do
     read -r hotkey pm2_name <<< "${entry}"
     echo "Starting miner: pm2=${pm2_name} hotkey=${hotkey}"
     pm2 delete "${pm2_name}" 2>/dev/null || true
     # shellcheck disable=SC2046
-    pm2 start "${MINER_SCRIPT}" \
-      --name "${pm2_name}" -- \
+    pm2 start "${VENV_PYTHON}" \
+      --name "${pm2_name}" \
+      --cwd "${REPO_ROOT}" \
+      -- "${MINER_SCRIPT}" \
       $(miner_args "${hotkey}")
   done
 
