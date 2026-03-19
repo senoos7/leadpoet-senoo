@@ -322,10 +322,42 @@ class DomainHistoryManager:
 
 
 class SearchCache:
-    """Manages SERP result caching with TTL."""
+    """Manages SERP result caching with TTL, persisted to disk when a
+    data_dir is provided so results survive across the 60-second sourcing
+    cycles and do not consume daily GSE quota on every loop iteration."""
 
-    def __init__(self):
+    _CACHE_FILE = "serp_cache.json"
+
+    def __init__(self, data_dir: Optional[str] = None):
+        self._data_dir = Path(data_dir) if data_dir else None
         self.cache: Dict[str, Dict[str, Any]] = {}
+        self._load()
+
+    def _cache_path(self) -> Optional[Path]:
+        if self._data_dir:
+            self._data_dir.mkdir(parents=True, exist_ok=True)
+            return self._data_dir / self._CACHE_FILE
+        return None
+
+    def _load(self) -> None:
+        """Load persisted cache from disk (best-effort)."""
+        path = self._cache_path()
+        if path and path.exists():
+            try:
+                with open(path, "r") as f:
+                    self.cache = json.load(f)
+            except Exception:
+                self.cache = {}
+
+    def _save(self) -> None:
+        """Persist current cache to disk (best-effort)."""
+        path = self._cache_path()
+        if path:
+            try:
+                with open(path, "w") as f:
+                    json.dump(self.cache, f)
+            except Exception:
+                pass
 
     def _get_cache_key(self, query: str, page: int) -> str:
         """Generate cache key for query and page."""
@@ -363,13 +395,14 @@ class SearchCache:
             except ValueError:
                 pass
 
-        # Expired, remove from cache
+        # Expired, remove from cache and persist removal
         del self.cache[cache_key]
+        self._save()
         return None
 
     def cache_results(self, query: str, page: int, results: Dict[str, Any]) -> None:
         """
-        Cache search results.
+        Cache search results and persist to disk.
 
         Args:
             query: Search query
@@ -378,6 +411,7 @@ class SearchCache:
         """
         cache_key = self._get_cache_key(query, page)
         self.cache[cache_key] = {"results": results, "fetched_at": now_z()}
+        self._save()
 
 
 # ============================================================================
@@ -417,7 +451,7 @@ class DomainTool:
         )
 
         self.domain_history = DomainHistoryManager(data_dir)
-        self.search_cache = SearchCache()
+        self.search_cache = SearchCache(data_dir=str(self.data_dir))
 
         # Load schema checksum
         self.schema_checksum = load_schema_checksum()

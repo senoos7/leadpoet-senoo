@@ -296,13 +296,22 @@ else:
         if not LEAD_SORCERER_AVAILABLE:
             return []
 
-        # Create a temporary directory for this run
+        # Use a stable persistent data dir if set, so SERP cache and domain
+        # history survive across the 60-second sourcing cycles.  Fall back to
+        # a temp dir when the env var is absent (keeps backward compatibility).
+        stable_data_dir = os.environ.get("LEADPOET_DATA_DIR")
+        if stable_data_dir:
+            Path(stable_data_dir).mkdir(parents=True, exist_ok=True)
+
+        # Create a temporary directory for config files / working dir only
         with tempfile.TemporaryDirectory() as temp_dir:
             # Set up the temporary environment with config files
             setup_temp_environment(temp_dir)
 
-            # Set the data directory
-            os.environ["LEADPOET_DATA_DIR"] = temp_dir
+            # Point the orchestrator at the stable cache dir (or the temp dir
+            # if no persistent path was configured).
+            effective_data_dir = stable_data_dir or temp_dir
+            os.environ["LEADPOET_DATA_DIR"] = effective_data_dir
 
             # Change to temp directory so relative paths work
             original_cwd = os.getcwd()
