@@ -2091,7 +2091,6 @@ def main():
             print("\n❌ Terms not accepted. Miner disabled.")
             print("   You must accept the Contributor Terms to participate in the Leadpoet network.")
             print("   Please review the terms at: https://leadpoet.com/contributor-terms\n")
-            import sys
             sys.exit(0)
         
         # Record attestation LOCALLY (gateway verifies via lead metadata)
@@ -2102,7 +2101,6 @@ def main():
         except Exception as e:
             bt.logging.error(f"❌ Could not load wallet for attestation: {e}")
             print("\n❌ Failed to load wallet. Cannot proceed without valid wallet.")
-            import sys
             sys.exit(1)
         
         attestation = create_attestation_record(wallet_address, TERMS_VERSION_HASH)
@@ -2131,7 +2129,6 @@ def main():
             if response != "Y":
                 print("\n❌ Updated terms not accepted. Miner disabled.")
                 print("   You must accept the updated Contributor Terms to continue mining.\n")
-                import sys
                 sys.exit(0)
             
             # Update attestation
@@ -2142,7 +2139,6 @@ def main():
             except Exception as e:
                 bt.logging.error(f"❌ Could not load wallet for attestation: {e}")
                 print("\n❌ Failed to load wallet. Cannot proceed without valid wallet.")
-                import sys
                 sys.exit(1)
             
             attestation = create_attestation_record(wallet_address, TERMS_VERSION_HASH)
