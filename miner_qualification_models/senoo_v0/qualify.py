@@ -2528,37 +2528,42 @@ def _llm_extract_intent_from_data(
             icp_details = "\n".join(parts) + "\n"
 
     prompt = (
-        "You are a B2B lead qualification expert. Extract the STRONGEST "
-        "intent signal from this company data that matches the buyer's ICP.\n\n"
+        "You are a B2B sales intelligence analyst. Your job is to identify "
+        "the STRONGEST, MOST SPECIFIC intent signal from company data.\n\n"
         f"COMPANY: {company}\n"
         f"{icp_details}"
         f"ICP INTENT SIGNALS TO MATCH: {sig_str or 'hiring, funding, expansion, product launch, partnership'}\n"
         f"BUYER REQUEST: {icp_prompt[:400]}\n"
         f"SOURCE TYPE: {source_type}\n\n"
         f"RAW DATA (truncated):\n{raw_data[:3000]}\n\n"
-        "TASK: Find the text that BEST proves this company is a good lead "
-        "for the buyer. A salesperson selling the buyer's product would use "
-        "this text to justify reaching out.\n\n"
-        "PRIORITY ORDER (best to worst):\n"
-        "1. Specific actions matching ICP intent: hiring the target roles, "
-        "funding rounds, product launches, expansions, partnerships\n"
-        "2. Business activity showing buyer-relevant needs: new products, "
-        "customer wins, technology adoption, certifications\n"
-        "3. Company capabilities relevant to what the buyer sells\n\n"
-        "CRITICAL RULES:\n"
-        "- description: Copy VERBATIM text from the data (exact words). "
-        "Must be 50+ chars. Do NOT paraphrase or summarize.\n"
-        "- REJECT pure taglines, navigation text, or cookie notices. "
-        "The text MUST show what the company DOES or has DONE.\n"
+        "TASK: Write a description of the SINGLE STRONGEST specific event "
+        "that proves this company is a good lead for the buyer RIGHT NOW.\n\n"
+        "WHAT MAKES A STRONG DESCRIPTION:\n"
+        "- Job posting: '[Company] is actively hiring a [exact job title] "
+        "(posted [date if available]). This signals they need [buyer's product/service].'\n"
+        "- Funding: '[Company] raised $[amount] [Series X] in [month year] from "
+        "[investors]. They are scaling their [relevant area].'\n"
+        "- Product launch: '[Company] launched [specific product/feature] in "
+        "[month year], expanding into [market]. This indicates need for [buyer product].'\n"
+        "- Conference/event: '[Decision maker name] spoke at [event name] on "
+        "[date] about [topic], signaling active investment in [area].'\n"
+        "- Partnership: '[Company] announced a partnership with [partner] in "
+        "[month year] to [specific goal].'\n\n"
+        "REJECT and return null if data ONLY contains:\n"
+        "- Generic taglines ('We are committed to innovation')\n"
+        "- Navigation text, cookie banners, login forms\n"
+        "- Vague claims with no specific event, date, amount, or name\n"
+        "- Marketing copy that applies to any company in the industry\n\n"
+        "RULES:\n"
+        "- description: Write a specific event sentence (80-300 chars). "
+        "Include company name, specific action, date/amount/names where available.\n"
         "- date: Extract ONLY dates that appear in the data. "
         "If a post says '6h ago' or '1d' or '1w', leave date EMPTY. "
-        "Only use YYYY-MM-DD if an actual date is in the text.\n"
-        "- If the data only contains navigation, login forms, or cookie "
-        "banners with no substantive content, return null.\n\n"
+        "Only use YYYY-MM-DD if an actual calendar date is in the text.\n\n"
         "Return ONLY JSON (no markdown):\n"
-        '{"description": "verbatim text from data", '
+        '{"description": "specific event description", '
         '"date": "YYYY-MM-DD or empty string if no exact date", '
-        '"found": true} or null if nothing substantive found'
+        '"found": true} or null if no specific event found'
     )
     resp = _openrouter_chat(prompt, proxy_url)
     if not resp:
@@ -4157,6 +4162,14 @@ def _build_output(lead: Dict, ctx: Dict,
         "snippet": str(primary_snippet),
     }]
 
+    # Sources ranked by validator multiplier — never add "other" (0.3x), it
+    # drags the average down.  Only include a secondary signal if its source
+    # quality is at least as good as company_website (0.85x).
+    _HIGH_QUALITY_SOURCES = frozenset({
+        "linkedin", "job_board", "github", "news",
+        "company_website", "social_media",
+    })
+
     seen_urls = {chosen_url}
     if evidence:
         for ev in ranked_ev:
@@ -4169,6 +4182,10 @@ def _build_output(lead: Dict, ctx: Dict,
                 ev_src = _classify_source(ev_url)
                 if ev_src not in INTENT_SOURCE_ENUM:
                     ev_src = "company_website"
+                # Skip "other" and "review_site" sources — their 0.3x/0.75x
+                # multipliers lower the average unless the score is very high.
+                if ev_src not in _HIGH_QUALITY_SOURCES:
+                    continue
                 _raw_ev = (ev["extracted_text"] or "")
                 ev_desc = _raw_ev[:499]
                 ev_snippet = _raw_ev[:999]
