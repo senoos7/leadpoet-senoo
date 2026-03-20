@@ -433,11 +433,14 @@ else:
         Returns:
             List of leads in the format expected by the existing miner system
         """
-        # Check if required environment variables are set
-        required_env_vars = [
-            "GSE_API_KEY", "GSE_CX", "OPENROUTER_KEY", "FIRECRAWL_KEY"
-        ]
-        missing_vars = [var for var in required_env_vars if not os.getenv(var)]
+        # Check if required environment variables are set.
+        # Search: at least one of SERP_API_KEY (SerpAPI) or SERPER_API_KEY (Serper.dev)
+        always_required = ["OPENROUTER_KEY", "FIRECRAWL_KEY"]
+        missing_vars = [var for var in always_required if not os.getenv(var)]
+
+        has_search_key = bool(os.getenv("SERP_API_KEY") or os.getenv("SERPER_API_KEY"))
+        if not has_search_key:
+            missing_vars.append("SERP_API_KEY or SERPER_API_KEY")
 
         if missing_vars:
             print(
