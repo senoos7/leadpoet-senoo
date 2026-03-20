@@ -967,28 +967,29 @@ class DomainTool:
                 recompute_total_cost(record)
 
             except Exception as e:
-                self.logger.error(f"LLM scoring failed for domain {domain}: {e}")
-                # Set default values on scoring failure
-                record["icp"]["pre_score"] = 0.0
-                record["icp"]["pre_reason"] = f"Scoring failed: {str(e)}"
-                record["icp"]["pre_pass"] = False
-                record["icp"]["pre_flags"] = ["scoring_error"]
+                self.logger.warning(
+                    f"LLM pre-scoring unavailable for {domain} ({e}); "
+                    f"passing domain through with neutral score for crawl evaluation."
+                )
+                # LLM pre-scoring is an optional optimisation. When it fails
+                # (e.g. no OpenRouter credits, rate-limit, network error) we
+                # give the domain a neutral passing score so Firecrawl can
+                # perform the real evaluation instead of silently dropping it.
+                record["icp"]["pre_score"] = 0.5
+                record["icp"]["pre_reason"] = "LLM pre-scoring skipped; forwarded to crawl"
+                record["icp"]["pre_pass"] = True
+                record["icp"]["pre_flags"] = ["llm_skipped"]
 
-                # Set failure revisit time
-                _, failure_revisit_days, _ = self._get_refresh_parameters()
+                revisit_after_days, failure_revisit_days, _ = self._get_refresh_parameters()
                 record["provenance"]["next_revisit_at"] = compute_next_revisit(
-                    None, 0, failure_revisit_days, True
+                    None, revisit_after_days, failure_revisit_days, False
                 )
 
-                # Add status history entry
-                append_status(record["status_history"], "scored", "Scoring failed")
-
-                # Add audit entry
+                append_status(record["status_history"], "scored", "LLM skipped, passed to crawl")
                 append_audit(
-                    record, "Domain", f"Scoring failed for domain {domain}: {e}"
+                    record, "Domain", f"LLM pre-scoring skipped for {domain}: {e}"
                 )
 
-                # Set minimal cost
                 record["cost"]["domain_usd"] = round4(self.costs_config["serpapi"])
                 recompute_total_cost(record)
 
