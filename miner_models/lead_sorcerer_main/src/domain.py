@@ -211,11 +211,17 @@ class LLMScorer:
 
     def __init__(self, api_key: str, semaphore_pool: AsyncSemaphorePool):
         self.client = AsyncOpenAI(
-            api_key=api_key, base_url="https://openrouter.ai/api/v1"
+            api_key=api_key,
+            base_url="https://openrouter.ai/api/v1",
+            default_headers={
+                "HTTP-Referer": "https://github.com/leadpoet/miner",
+                "X-Title": "Leadpoet Miner",
+            },
         )
         self.semaphore_pool = semaphore_pool
-        self.primary_model = "gpt-4o-mini"
-        self.fallback_model = "gpt-3.5-turbo"
+        # OpenRouter requires the provider prefix in the model name
+        self.primary_model = "openai/gpt-4o-mini"
+        self.fallback_model = "openai/gpt-3.5-turbo"
 
     def _build_scoring_prompt(
         self, title: str, snippet: str, query: str, icp_text: str
