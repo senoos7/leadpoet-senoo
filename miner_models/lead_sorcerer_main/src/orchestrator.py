@@ -176,7 +176,7 @@ class LeadSorcererOrchestrator:
         try:
             costs_config = load_costs_config()
             required_providers = [
-                "gse",
+                "serpapi",
                 "openrouter",
                 "firecrawl",
             ]

@@ -63,39 +63,142 @@ DEFAULT_MODE = "thorough"
 # ============================================================================
 
 
-class GSESearchClient:
-    """Client for Google Programmable Search Engine (GSE)."""
+class WebSearchClient:
+    """Web search client using SerpAPI (primary) and Serper.dev (fallback).
 
-    def __init__(self, api_key: str, cx: str, semaphore_pool: AsyncSemaphorePool):
-        self.api_key = api_key
-        self.cx = cx
+    Priority:
+      1. SerpAPI  — set SERP_API_KEY  (https://serpapi.com)
+      2. Serper   — set SERPER_API_KEY (https://serper.dev) — cheaper backup
+
+    Both return real Google results without any GCP project setup.
+    Results are normalised to the same dict shape used by the rest of the
+    pipeline: {"items": [{"link", "title", "snippet", "displayLink"}]}.
+
+    Required env vars (at least one):
+      SERP_API_KEY    — SerpAPI key
+      SERPER_API_KEY  — Serper.dev key
+    """
+
+    _SERPAPI_URL = "https://serpapi.com/search.json"
+    _SERPER_URL = "https://google.serper.dev/search"
+
+    def __init__(self, semaphore_pool: AsyncSemaphorePool):
         self.semaphore_pool = semaphore_pool
-        self.base_url = "https://www.googleapis.com/customsearch/v1"
+        self.serp_api_key = os.environ.get("SERP_API_KEY", "")
+        self.serper_api_key = os.environ.get("SERPER_API_KEY", "")
+        self._logger = logging.getLogger(__name__)
+
+        if not self.serp_api_key and not self.serper_api_key:
+            raise EnvironmentError(
+                "No search API key found. Set SERP_API_KEY (SerpAPI) "
+                "or SERPER_API_KEY (Serper.dev) in your .env file."
+            )
+
+    # ------------------------------------------------------------------
+    # SerpAPI
+    # ------------------------------------------------------------------
+    async def _serpapi_search(self, query: str, page: int) -> Dict[str, Any]:
+        """Call SerpAPI and return normalised result dict."""
+        params = {
+            "api_key": self.serp_api_key,
+            "engine": "google",
+            "q": query,
+            "num": 10,
+            "start": (page - 1) * 10,
+            "hl": "en",
+            "gl": "us",
+        }
+        async with httpx.AsyncClient(timeout=(5.0, 20.0)) as client:
+            resp = await client.get(self._SERPAPI_URL, params=params)
+            resp.raise_for_status()
+            data = resp.json()
+
+        items = []
+        for r in data.get("organic_results", []):
+            items.append({
+                "link": r.get("link", ""),
+                "title": r.get("title", ""),
+                "snippet": r.get("snippet", ""),
+                "displayLink": r.get("displayed_link", ""),
+            })
+        return {"items": items, "_source": "serpapi"}
+
+    # ------------------------------------------------------------------
+    # Serper.dev
+    # ------------------------------------------------------------------
+    async def _serper_search(self, query: str, page: int) -> Dict[str, Any]:
+        """Call Serper.dev and return normalised result dict."""
+        headers = {
+            "X-API-KEY": self.serper_api_key,
+            "Content-Type": "application/json",
+        }
+        payload = {"q": query, "num": 10, "page": page}
+        async with httpx.AsyncClient(timeout=(5.0, 20.0)) as client:
+            resp = await client.post(
+                self._SERPER_URL, headers=headers, json=payload
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        items = []
+        for r in data.get("organic", []):
+            items.append({
+                "link": r.get("link", ""),
+                "title": r.get("title", ""),
+                "snippet": r.get("snippet", ""),
+                "displayLink": r.get("link", ""),
+            })
+        return {"items": items, "_source": "serper"}
 
     async def search(self, query: str, page: int = 1) -> Dict[str, Any]:
         """
-        Perform Google search with pagination.
+        Perform a full web search. Tries SerpAPI first; falls back to
+        Serper.dev if SerpAPI is unavailable or returns an error.
 
         Args:
-            query: Search query
+            query: Search query string
             page: Page number (1-based)
 
         Returns:
-            Search results dictionary
+            Dict with key "items" containing list of result dicts
+            (link, title, snippet, displayLink).
         """
         async with self.semaphore_pool:
-            params = {
-                "key": self.api_key,
-                "cx": self.cx,
-                "q": query,
-                "start": (page - 1) * 10 + 1,  # GSE uses 1-based indexing
-                "num": 10,
-            }
+            # --- SerpAPI primary ---
+            if self.serp_api_key:
+                try:
+                    result = await self._serpapi_search(query, page)
+                    self._logger.info(
+                        f"✅ SerpAPI: {len(result['items'])} results for '{query}' p{page}"
+                    )
+                    return result
+                except Exception as e:
+                    self._logger.warning(
+                        f"SerpAPI failed for '{query}' p{page}: {e} "
+                        f"— {'trying Serper fallback' if self.serper_api_key else 'no fallback key'}"
+                    )
 
-            async with httpx.AsyncClient(timeout=(3.0, 10.0)) as client:
-                response = await client.get(self.base_url, params=params)
-                response.raise_for_status()
-                return response.json()
+            # --- Serper.dev fallback ---
+            if self.serper_api_key:
+                try:
+                    result = await self._serper_search(query, page)
+                    self._logger.info(
+                        f"✅ Serper: {len(result['items'])} results for '{query}' p{page}"
+                    )
+                    return result
+                except Exception as e:
+                    self._logger.error(
+                        f"Serper fallback also failed for '{query}' p{page}: {e}"
+                    )
+                    raise
+
+            raise RuntimeError(
+                "All search backends failed and no fallback key is configured."
+            )
+
+
+# Keep the old name as an alias so nothing else in the codebase needs changing
+GSESearchClient = WebSearchClient
 
 
 # ============================================================================
@@ -361,7 +464,7 @@ class SearchCache:
 
     def _get_cache_key(self, query: str, page: int) -> str:
         """Generate cache key for query and page."""
-        return f"{query}|{page}|google"
+        return f"{query}|{page}|serpapi"
 
     def get_cached_results(
         self, query: str, page: int, ttl_hours: int
@@ -430,7 +533,7 @@ class DomainTool:
 
         # Load costs configuration
         self.costs_config = load_costs_config()
-        validate_provider_config(["gse", "openrouter"], self.costs_config)
+        validate_provider_config(["serpapi", "openrouter"], self.costs_config)
 
         # Initialize components
         self.permit_manager = PermitManager(
@@ -440,9 +543,7 @@ class DomainTool:
         )
         self.semaphore_pool = AsyncSemaphorePool(self.permit_manager)
 
-        self.gse_client = GSESearchClient(
-            api_key=os.environ["GSE_API_KEY"],
-            cx=os.environ["GSE_CX"],
+        self.gse_client = WebSearchClient(
             semaphore_pool=self.semaphore_pool,
         )
 
@@ -839,7 +940,7 @@ class DomainTool:
                 )
 
                 # Calculate costs
-                gse_cost = self.costs_config["gse"]
+                search_cost = self.costs_config["serpapi"]
                 openrouter_cost = self.costs_config["openrouter"]
 
                 # Estimate token usage (rough approximation)
@@ -856,7 +957,7 @@ class DomainTool:
                 total_tokens = prompt_tokens + response_tokens
                 token_cost = (total_tokens / 1000) * openrouter_cost
 
-                record["cost"]["domain_usd"] = round4(gse_cost + token_cost)
+                record["cost"]["domain_usd"] = round4(search_cost + token_cost)
                 recompute_total_cost(record)
 
             except Exception as e:
@@ -882,7 +983,7 @@ class DomainTool:
                 )
 
                 # Set minimal cost
-                record["cost"]["domain_usd"] = round4(self.costs_config["gse"])
+                record["cost"]["domain_usd"] = round4(self.costs_config["serpapi"])
                 recompute_total_cost(record)
 
             # Store in domain map

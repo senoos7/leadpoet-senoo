@@ -2,9 +2,7 @@
   "name": "B2B Technology Companies - Default ICP",
   "icp_text": "B2B technology and SaaS companies with decision maker contact information including founders, CEOs, VPs and directors for business development opportunities.",
   "queries": [
-    "B2B SaaS company CEO founder contact email",
-    "technology startup founder director email site:linkedin.com",
-    "enterprise software company VP director business development"
+    "B2B SaaS company CEO founder contact email"
   ],
   "specific_urls": [],
   "default_contact_linkedin": "",

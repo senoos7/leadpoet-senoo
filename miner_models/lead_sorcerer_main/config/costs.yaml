@@ -5,9 +5,9 @@ openrouter:
   unit: '1k_tokens'
   usd_per_unit: 0.0020
 
-gse:
+serpapi:
   unit: 'request'
-  usd_per_unit: 0.0005
+  usd_per_unit: 0.001
 
 firecrawl:
   unit: 'extract'
