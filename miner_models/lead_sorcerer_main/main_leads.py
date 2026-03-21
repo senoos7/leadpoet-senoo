@@ -286,6 +286,14 @@ else:
         socials = company.get("socials", {}) or {}
         company_linkedin = safe_str(socials.get("linkedin"))
 
+        # Fallback: derive LinkedIn company URL from domain name when Firecrawl
+        # didn't find it. Most companies use their brand (domain without TLD) as
+        # their LinkedIn slug (e.g. straiker.ai → /company/straiker).
+        if not company_linkedin and domain:
+            company_slug = domain.split(".")[0].lower().strip()
+            if company_slug:
+                company_linkedin = f"https://www.linkedin.com/company/{company_slug}"
+
         # ── Source URL (company website used as provenance anchor) ────────────
         domain = safe_str(lead_record.get("domain"))
         source_url = f"https://{domain}" if domain else ""

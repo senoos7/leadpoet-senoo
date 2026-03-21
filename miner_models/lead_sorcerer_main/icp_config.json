@@ -4,7 +4,8 @@
   "queries": [
     "cybersecurity startup \"co-founder\" OR \"CEO\" \"about\" team email site:*.ai OR site:*.io",
     "AI SaaS startup founder CEO \"contact\" email \"San Francisco\" OR \"Austin\" OR \"New York\" site:*.ai",
-    "B2B security software startup founder team page email linkedin github 2020 2021 2022"
+    "cybersecurity startup CEO founder email \"contact us\" -site:linkedin.com -site:github.com -site:reddit.com -site:crunchbase.com -site:ycombinator.com",
+    "AI security startup \"co-founder\" email team \"about\" site:*.com -site:linkedin.com -site:github.com -site:reddit.com"
   ],
   "specific_urls": [],
   "default_contact_linkedin": "",
