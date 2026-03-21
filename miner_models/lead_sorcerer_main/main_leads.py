@@ -282,6 +282,11 @@ else:
         hq_location = safe_str(company.get("hq_location"))
         city, state, country = _parse_hq_location(hq_location)
 
+        # ── Source URL (company website used as provenance anchor) ────────────
+        domain = safe_str(lead_record.get("domain"))
+        source_url = f"https://{domain}" if domain else ""
+        website = source_url  # keep consistent
+
         # ── Social links ──────────────────────────────────────────────────────
         socials = company.get("socials", {}) or {}
         company_linkedin = safe_str(socials.get("linkedin"))
@@ -293,11 +298,6 @@ else:
             company_slug = domain.split(".")[0].lower().strip()
             if company_slug:
                 company_linkedin = f"https://www.linkedin.com/company/{company_slug}"
-
-        # ── Source URL (company website used as provenance anchor) ────────────
-        domain = safe_str(lead_record.get("domain"))
-        source_url = f"https://{domain}" if domain else ""
-        website = source_url  # keep consistent
 
         # ── Employee count ────────────────────────────────────────────────────
         employee_count = safe_str(company.get("employee_count"))
