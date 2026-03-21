@@ -2199,10 +2199,41 @@ Remember: Extract unique, valuable information about each individual business op
                     .get("base_score", 0.5)
                 )
 
-        # CRITICAL FIX: Process team_members for single company sites
-        # This ensures contacts are extracted from team_members even for non-database sites
-        if extracted_data.get("team_members"):
-            self._process_database_extracted_data(record, extracted_data, icp_config)
+        # Process team_members returned by the single-company Firecrawl schema.
+        # The schema places team_members at the TOP LEVEL of the response (not inside
+        # "company"), so we read and convert them directly here instead of routing
+        # through _process_database_extracted_data (which expects a "listings" array).
+        team_members = extracted_data.get("team_members") or []
+        if team_members:
+            if "contacts" not in record:
+                record["contacts"] = []
+            for idx, member in enumerate(team_members):
+                if not isinstance(member, dict):
+                    continue
+                contact = {
+                    "contact_id": f"tm_{idx + 1}",
+                    "full_name": member.get("name"),
+                    "role": member.get("role"),
+                    "department": None,
+                    "seniority": None,
+                    "location": None,
+                    "linkedin": member.get("linkedin"),
+                    "decision_maker": member.get("decision_maker", False),
+                }
+                email = member.get("email", "")
+                if email and str(email).strip() and email != "null":
+                    contact["email"] = str(email).lower().strip()
+                phone = member.get("phone", "")
+                if phone and str(phone).strip() and phone != "null":
+                    contact["phone"] = str(phone).strip()
+                record["contacts"].append(contact)
+            if record["contacts"]:
+                record["best_contact_id"] = record["contacts"][0]["contact_id"]
+            self.logger.info(
+                f"✅ Extracted {len(record['contacts'])} contacts from team_members "
+                f"for {record.get('domain', 'unknown')}"
+            )
+        if team_members:
 
             if not intent_signals:
                 intent_signals = ["No specific intent signals found during analysis"]
@@ -2238,9 +2269,14 @@ Remember: Extract unique, valuable information about each individual business op
                 "decision_maker_intent": "No decision maker intent data available",
             }
 
-        # Contact information fields
+        # Contact information fields.
+        # phone_numbers and socials live at the TOP LEVEL of the Firecrawl response
+        # (not inside "company"), so check extracted_data first.
         company["emails"] = company_data.get("emails", [])
-        company["phone_numbers"] = company_data.get("phone_numbers", [])
+        company["phone_numbers"] = (
+            extracted_data.get("phone_numbers")
+            or company_data.get("phone_numbers", [])
+        )
 
         # Initialize company structures
         if "socials" not in company:
@@ -2254,8 +2290,10 @@ Remember: Extract unique, valuable information about each individual business op
                 "youtube": None,
             }
 
-        # Handle social media links
-        socials_data = company_data.get("socials", {})
+        # Handle social media links.
+        # socials lives at the TOP LEVEL of the Firecrawl response; fall back to
+        # the nested company.socials only if the top-level key is absent.
+        socials_data = extracted_data.get("socials") or company_data.get("socials", {})
 
         # Handle LinkedIn
         linkedin_url = socials_data.get("linkedin")
