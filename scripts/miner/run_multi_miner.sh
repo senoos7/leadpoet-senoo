@@ -47,7 +47,6 @@ MINERS=(
   # "default leadpoet_miner_1"
   # "hotkey2 leadpoet_miner_2"
   "leadpoet-miner-63181 leadpoet_miner_1"
-  "leadpoet-miner-63182 leadpoet_miner_2"
 )
 
 # ----------------------------------------------------------------
