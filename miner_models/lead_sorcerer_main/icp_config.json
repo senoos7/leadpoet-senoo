@@ -1,8 +1,10 @@
 {
-  "name": "B2B Technology Companies - Default ICP",
-  "icp_text": "B2B technology and SaaS companies with decision maker contact information including founders, CEOs, VPs and directors for business development opportunities.",
+  "name": "B2B Cybersecurity and AI Startups",
+  "icp_text": "B2B cybersecurity, AI/ML, and SaaS technology startups with 10-500 employees, founded after 2015, based in the United States. Target companies with publicly listed founders or CEOs who have contact information on the company website. Ideal contacts are CEO, Co-Founder, CTO, or VP-level decision makers at venture-backed or bootstrapped startups.",
   "queries": [
-    "B2B SaaS company CEO founder contact email"
+    "cybersecurity startup \"co-founder\" OR \"CEO\" \"about\" team email site:*.ai OR site:*.io",
+    "AI SaaS startup founder CEO \"contact\" email \"San Francisco\" OR \"Austin\" OR \"New York\" site:*.ai",
+    "B2B security software startup founder team page email linkedin github 2020 2021 2022"
   ],
   "specific_urls": [],
   "default_contact_linkedin": "",
@@ -28,8 +30,8 @@
     "max_concurrent_requests": 3
   },
   "search": {
-    "max_pages": 5,
-    "max_results_per_query": 50
+    "max_pages": 1,
+    "max_results_per_query": 10
   },
   "testing": {
     "process_rejected": true,

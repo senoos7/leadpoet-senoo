@@ -124,6 +124,23 @@ FIRECRAWL_EXTRACT_SCHEMA = {
                 },
             },
         },
+        "phone_numbers": {
+            "type": "array",
+            "items": {"type": "string"},
+            "description": "Company or contact phone numbers found on the site",
+        },
+        "socials": {
+            "type": "object",
+            "properties": {
+                "linkedin": {"type": "string", "description": "Company LinkedIn URL"},
+                "twitter": {"type": "string", "description": "Twitter/X profile URL"},
+                "github": {"type": "string", "description": "GitHub organization URL"},
+                "facebook": {"type": "string", "description": "Facebook page URL"},
+                "instagram": {"type": "string", "description": "Instagram profile URL"},
+                "youtube": {"type": "string", "description": "YouTube channel URL"},
+            },
+            "description": "Social media URLs found in site footer or about page",
+        },
         "team_members": {
             "type": "array",
             "items": {
@@ -133,51 +150,46 @@ FIRECRAWL_EXTRACT_SCHEMA = {
                     "role": {"type": "string", "description": "Job title/role"},
                     "email": {"type": "string", "description": "Email address"},
                     "phone": {"type": "string", "description": "Phone number"},
+                    "linkedin": {"type": "string", "description": "Personal LinkedIn profile URL"},
                     "decision_maker": {
                         "type": "boolean",
-                        "description": "Whether this person is a decision maker",
+                        "description": "Whether this person is a decision maker (CEO, founder, VP, director)",
                     },
                 },
             },
             "maxItems": 10,
-            "description": "Key staff members and their contact information",
+            "description": "Key executives and decision makers with contact information",
         },
     },
 }
 
 # Firecrawl extraction prompt - SIMPLIFIED for better AI extraction success
 FIRECRAWL_EXTRACT_PROMPT = (
-    "Extract essential business information from this website. Focus on the most important details only.\n\n"
+    "Extract business contact information from this website. This data will be used for B2B outreach.\n\n"
     "EXTRACTION RULES:\n"
-    "- Extract ONLY information that is clearly stated on the website\n"
-    "- Use null/empty for any information not found\n"
+    "- Extract ONLY information clearly present on the website\n"
     "- Do NOT invent or guess any data\n"
-    "- Focus on homepage, about page, and contact page\n\n"
+    "- Focus on homepage, about/team page, and contact page\n\n"
     "COMPANY INFORMATION:\n"
-    "- Company name (from title, logo, or header)\n"
-    "- Brief description of what they do\n"
-    "- Industry or business type (broad category)\n"
-    "- Sub-industry (specific niche or specialization within the industry)\n"
-    "- Main location (city, state, country)\n"
-    "- Number of locations if mentioned\n"
-    "- Year founded if mentioned\n"
-    "- Employee count if mentioned\n"
-    "- Revenue information if mentioned\n"
-    "- Company structure (LLC, Corp, etc.) if mentioned\n"
-    "- Main specialties or services offered\n\n"
-    "INTENT ANALYSIS:\n"
-    "- Look for signs they want to sell, grow, partner, or transition\n"
-    "- Check for retirement planning, succession planning, expansion plans\n"
-    "- Look for 'for sale', 'seeking partners', 'growth opportunities'\n"
-    "- Score confidence (0-1) based on evidence found\n"
-    "- List specific intent signals found\n"
-    "- Categorize as high, medium, or low intent\n\n"
-    "TEAM MEMBERS:\n"
-    "- Key executives and decision makers\n"
-    "- Names, roles, and contact information\n"
-    "- Focus on owners, CEOs, founders, managers\n"
-    "- Limit to 10 most important people\n\n"
-    "IMPORTANT: Extract only what you can clearly see on the website. If information is not available, leave it as null."
+    "- Company name, description, industry, sub-industry\n"
+    "- Headquarters location (city, state, country)\n"
+    "- Founded year, employee count, revenue range if mentioned\n"
+    "- Main specialties or services\n\n"
+    "PHONE NUMBERS:\n"
+    "- Extract ALL phone numbers visible on the site (main office, contact page, footer)\n"
+    "- Include country code if present (e.g. +1 650 445 4457)\n\n"
+    "SOCIAL MEDIA LINKS:\n"
+    "- Look in the site footer, about page, and contact page\n"
+    "- Extract full URLs for: LinkedIn, Twitter/X, GitHub, Facebook, Instagram, YouTube\n"
+    "- These often appear as icons in the footer\n\n"
+    "TEAM MEMBERS (PRIORITY — most important):\n"
+    "- Find the CEO, founder, co-founder, president, or top decision maker\n"
+    "- Extract their full name, job title, email address, phone, and LinkedIn profile URL\n"
+    "- Email addresses may appear on contact pages, team pages, or press pages\n"
+    "- Look for patterns like firstname@company.com or firstname.lastname@company.com\n"
+    "- Also check for mailto: links hidden in HTML\n"
+    "- Limit to 5 most senior people\n\n"
+    "IMPORTANT: A lead with an email address is far more valuable than one without. Prioritize finding emails."
 )
 
 
