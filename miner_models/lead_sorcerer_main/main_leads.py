@@ -169,6 +169,36 @@ else:
         "employee_count",
     ]
 
+    # Domains that will NEVER yield valid founder leads — skip before hitting Firecrawl.
+    # Includes: aggregators, large enterprises, media sites, VC portals, social platforms.
+    DOMAIN_DENYLIST = {
+        # Social / media platforms
+        "linkedin.com", "github.com", "reddit.com", "twitter.com", "x.com",
+        "youtube.com", "facebook.com", "instagram.com", "tiktok.com",
+        "medium.com", "substack.com", "dev.to",
+        # News / editorial
+        "techcrunch.com", "venturebeat.com", "wired.com", "forbes.com",
+        "bloomberg.com", "wsj.com", "nytimes.com", "theguardian.com",
+        "businessinsider.com", "inc.com", "entrepreneur.com",
+        # B2B data aggregators — these ARE the competition, not targets
+        "zoominfo.com", "apollo.io", "hunter.io", "clearbit.com",
+        "lusha.com", "rocketreach.co", "snov.io", "seamless.ai",
+        "contactout.com", "uplead.com", "leadiq.com", "cognism.com",
+        # Company databases / directories
+        "crunchbase.com", "pitchbook.com", "owler.com", "cbinsights.com",
+        "ycombinator.com", "angellist.com", "producthunt.com",
+        "clutch.co", "g2.com", "capterra.com", "trustpilot.com",
+        # VC / investor portals (not target companies)
+        "a16z.com", "sequoiacap.com", "greylock.com", "foundationcapital.com",
+        "bessemervp.com", "accel.com", "lightspeedvp.com", "nea.com",
+        # Large enterprises (too big, no public founder emails)
+        "crowdstrike.com", "paloaltonetworks.com", "sentinelone.com",
+        "darktrace.com", "fortinet.com", "checkpoint.com", "cisco.com",
+        "microsoft.com", "google.com", "amazon.com", "ibm.com",
+        # Personal / blog sites that don't represent B2B companies
+        "danielscrivner.com",
+    }
+
     # Common abbreviation → full country name mapping used when parsing hq_location.
     _COUNTRY_NORM = {
         "US": "United States", "USA": "United States", "U.S.": "United States",
@@ -527,6 +557,12 @@ else:
             legacy_leads = []
             for record in lead_records:
                 try:
+                    # Skip known-bad domains before any expensive conversion
+                    record_domain = str(record.get("domain", "")).lower().strip()
+                    if record_domain in DOMAIN_DENYLIST:
+                        print(f"🚫 Skipping denylisted domain: {record_domain}")
+                        continue
+
                     legacy_lead = convert_lead_record_to_legacy_format(record)
 
                     # Basic sanity: must have email and business name

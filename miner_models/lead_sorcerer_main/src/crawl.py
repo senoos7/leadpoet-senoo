@@ -334,9 +334,11 @@ IMPORTANT: If no clear intent signals are found, set business_intent_score to {i
             else:
                 # Fallback to domain-based URLs if no specific URLs match this domain
                 priority_pages = [
-                    f"https://{domain}",  # Homepage (most comprehensive)
-                    f"https://{domain}/about",  # About page (company info)
-                    f"https://{domain}/contact",  # Contact page (contact info)
+                    f"https://{domain}",             # Homepage
+                    f"https://{domain}/about",        # About page
+                    f"https://{domain}/team",         # Team page (common for startups)
+                    f"https://{domain}/leadership",   # Leadership page
+                    f"https://{domain}/contact",      # Contact page
                 ]
                 urls_to_extract.extend(priority_pages)
                 self.logger.info(f"🔗 No specific URLs match {domain}, using domain-based URLs")
@@ -369,9 +371,11 @@ IMPORTANT: If no clear intent signals are found, set business_intent_score to {i
             # Mode 3: Standard single company mode
             # Prioritize most important pages for cost optimization
             priority_pages = [
-                f"https://{domain}",  # Homepage (most comprehensive)
-                f"https://{domain}/about",  # About page (company info)
-                f"https://{domain}/contact",  # Contact page (contact info)
+                f"https://{domain}",             # Homepage
+                f"https://{domain}/about",        # About page
+                f"https://{domain}/team",         # Team page (common for startups)
+                f"https://{domain}/leadership",   # Leadership page
+                f"https://{domain}/contact",      # Contact page
             ]
             urls_to_extract.extend(priority_pages)
             self.logger.info("🔗 Added priority domain pages for comprehensive data")

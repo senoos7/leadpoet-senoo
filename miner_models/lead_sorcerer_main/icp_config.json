@@ -2,10 +2,11 @@
   "name": "B2B Cybersecurity and AI Startups",
   "icp_text": "B2B cybersecurity, AI/ML, and SaaS technology startups with 10-500 employees, founded after 2015, based in the United States. Target companies with publicly listed founders or CEOs who have contact information on the company website. Ideal contacts are CEO, Co-Founder, CTO, or VP-level decision makers at venture-backed or bootstrapped startups.",
   "queries": [
-    "cybersecurity startup \"co-founder\" OR \"CEO\" \"about\" team email site:*.ai OR site:*.io",
-    "AI SaaS startup founder CEO \"contact\" email \"San Francisco\" OR \"Austin\" OR \"New York\" site:*.ai",
-    "cybersecurity startup CEO founder email \"contact us\" -site:linkedin.com -site:github.com -site:reddit.com -site:crunchbase.com -site:ycombinator.com",
-    "AI security startup \"co-founder\" email team \"about\" site:*.com -site:linkedin.com -site:github.com -site:reddit.com"
+    "seed stage cybersecurity startup founder CEO email \"contact\" site:*.io -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com -site:youtube.com",
+    "\"series A\" OR \"series B\" AI security startup co-founder email \"team\" OR \"about\" site:*.ai -site:linkedin.com -site:github.com -site:reddit.com -site:crunchbase.com",
+    "B2B cybersecurity startup founded 2020 OR 2021 OR 2022 CEO founder \"contact us\" email -site:linkedin.com -site:github.com -site:medium.com -site:youtube.com -site:techcrunch.com",
+    "cybersecurity SaaS startup \"meet the team\" OR \"our founders\" CEO email site:*.com -site:linkedin.com -site:github.com -site:reddit.com -site:medium.com -site:crunchbase.com -site:crowdstrike.com -site:darktrace.com",
+    "AI startup \"co-founder\" email \"Seattle\" OR \"Boston\" OR \"Denver\" OR \"Chicago\" \"contact\" -site:linkedin.com -site:github.com -site:medium.com -site:crunchbase.com"
   ],
   "specific_urls": [],
   "default_contact_linkedin": "",
@@ -23,7 +24,7 @@
   "refresh_policy": {
     "revisit_after_days": 90,
     "failure_revisit_days": 7,
-    "domain_serp_ttl_hours": 48,
+    "domain_serp_ttl_hours": 6,
     "crawl_ttl_days": 14,
     "enrich_ttl_days": 30
   },
@@ -65,7 +66,22 @@
   "exclusion_criteria": {
     "ownership_types": [],
     "max_locations": 10000,
-    "excluded_keywords": []
+    "excluded_keywords": [],
+    "excluded_domains": [
+      "linkedin.com", "github.com", "reddit.com", "twitter.com", "x.com",
+      "youtube.com", "facebook.com", "instagram.com", "tiktok.com",
+      "medium.com", "substack.com", "dev.to",
+      "techcrunch.com", "venturebeat.com", "wired.com", "forbes.com",
+      "bloomberg.com", "businessinsider.com", "inc.com",
+      "zoominfo.com", "apollo.io", "hunter.io", "clearbit.com",
+      "rocketreach.co", "snov.io", "seamless.ai", "contactout.com",
+      "crunchbase.com", "pitchbook.com", "ycombinator.com", "angellist.com",
+      "producthunt.com", "clutch.co", "g2.com", "capterra.com",
+      "a16z.com", "sequoiacap.com", "greylock.com", "foundationcapital.com",
+      "crowdstrike.com", "paloaltonetworks.com", "sentinelone.com",
+      "darktrace.com", "fortinet.com", "microsoft.com", "google.com",
+      "amazon.com", "ibm.com", "danielscrivner.com"
+    ]
   },
   "targeting": {
     "location_types": ["headquarters", "single_location"],
