@@ -161,6 +161,49 @@ else:
             temp_schemas = temp_path / "schemas"
             shutil.copytree(source_schemas, temp_schemas, dirs_exist_ok=True)
 
+    # All fields the gateway requires to be non-empty before accepting a lead.
+    GATEWAY_REQUIRED_FIELDS = [
+        "business", "full_name", "first", "last", "email", "role",
+        "website", "industry", "sub_industry", "country", "city",
+        "linkedin", "company_linkedin", "source_url", "description",
+        "employee_count",
+    ]
+
+    # Common abbreviation → full country name mapping used when parsing hq_location.
+    _COUNTRY_NORM = {
+        "US": "United States", "USA": "United States", "U.S.": "United States",
+        "U.S.A.": "United States", "UNITED STATES OF AMERICA": "United States",
+        "UK": "United Kingdom", "GB": "United Kingdom", "G.B.": "United Kingdom",
+        "CA": "Canada", "AU": "Australia", "DE": "Germany", "FR": "France",
+        "IN": "India", "SG": "Singapore", "IL": "Israel",
+    }
+
+    def _parse_hq_location(hq_location: str):
+        """
+        Split a free-text hq_location string into (city, state, country).
+
+        Handles patterns like:
+          "San Francisco, CA, United States"
+          "New York, NY, USA"
+          "London, UK"
+          "Tel Aviv, Israel"
+          "Berlin, Germany"
+        """
+        if not hq_location:
+            return "", "", ""
+        parts = [p.strip() for p in hq_location.split(",")]
+        city = state = country = ""
+        if len(parts) >= 3:
+            city, state, country = parts[0], parts[1], parts[2]
+        elif len(parts) == 2:
+            city, country = parts[0], parts[1]
+        else:
+            city = parts[0]
+        # Normalize abbreviations (e.g. "USA" → "United States")
+        country_key = country.strip().upper().rstrip(".")
+        country = _COUNTRY_NORM.get(country_key, country.strip())
+        return city.strip(), state.strip(), country.strip()
+
     def convert_lead_record_to_legacy_format(
             lead_record: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -235,48 +278,59 @@ else:
                 return default
             return str(value)
 
-        # Build the enhanced format with all requested fields
+        # ── Location: split hq_location into city / state / country ──────────
+        hq_location = safe_str(company.get("hq_location"))
+        city, state, country = _parse_hq_location(hq_location)
+
+        # ── Social links ──────────────────────────────────────────────────────
+        socials = company.get("socials", {}) or {}
+        company_linkedin = safe_str(socials.get("linkedin"))
+
+        # ── Source URL (company website used as provenance anchor) ────────────
+        domain = safe_str(lead_record.get("domain"))
+        source_url = f"https://{domain}" if domain else ""
+        website = source_url  # keep consistent
+
+        # ── Employee count ────────────────────────────────────────────────────
+        employee_count = safe_str(company.get("employee_count"))
+
+        # Build the lead dict with all gateway-required fields populated.
         legacy_lead = {
-            "business":
-            safe_str(company.get("name")),
-            "description":
-            safe_str(company.get("description")),
-            "full_name":
-            full_name,
-            "first":
-            first_name,
-            "last":
-            last_name,
-            "email":
-            email,
-            "phone_numbers":
-            company.get("phone_numbers", []),
-            "website":
-            f"https://{safe_str(lead_record.get('domain'))}"
-            if lead_record.get('domain') else "",
-            "industry":
-            safe_str(company.get("industry")),
-            "sub_industry":
-            safe_str(company.get("sub_industry")),
-            "role":
-            job_title,
-            "linkedin":
-            linkedin,  # Add LinkedIn URL for gateway required field check
-            "region":
-            safe_str(company.get("hq_location")),
-            "founded_year":
-            safe_str(company.get("founded_year")),
-            "ownership_type":
-            safe_str(company.get("ownership_type")),
-            "company_type":
-            safe_str(company.get("company_type")),
-            "number_of_locations":
-            safe_str(company.get("number_of_locations")),
-            "socials":
-            company.get("socials", {}),
+            "business": safe_str(company.get("name")),
+            "description": safe_str(company.get("description")),
+            "full_name": full_name,
+            "first": first_name,
+            "last": last_name,
+            "email": email,
+            "role": job_title,
+            "linkedin": linkedin,
+            "company_linkedin": company_linkedin,
+            "website": website,
+            "source_url": source_url,
+            "source_type": "company_site",
+            "industry": safe_str(company.get("industry")),
+            "sub_industry": safe_str(company.get("sub_industry")),
+            "country": country,
+            "city": city,
+            "state": state,
+            "employee_count": employee_count,
+            # Optional enrichment fields
+            "phone_numbers": company.get("phone_numbers", []),
+            "socials": socials,
+            "hq_country": country,
+            "hq_state": state,
+            "hq_city": city,
+            "founded_year": safe_str(company.get("founded_year")),
+            "ownership_type": safe_str(company.get("ownership_type")),
+            "company_type": safe_str(company.get("company_type")),
+            "number_of_locations": safe_str(company.get("number_of_locations")),
         }
 
         return legacy_lead
+
+    def validate_lead_for_gateway(lead: Dict[str, Any]) -> List[str]:
+        """Return list of missing required gateway fields (empty = lead is ready)."""
+        return [f for f in GATEWAY_REQUIRED_FIELDS if not lead.get(f)]
 
     async def run_lead_sorcerer_pipeline(
             num_leads: int,
@@ -461,15 +515,26 @@ else:
                 print("⚠️ Lead Sorcerer produced no leads")
                 return []
 
-            # Convert to legacy format
+            # Convert to legacy format and run local pre-submission validation
             legacy_leads = []
             for record in lead_records:
                 try:
                     legacy_lead = convert_lead_record_to_legacy_format(record)
 
-                    # Only include leads with valid email and business name
-                    if legacy_lead.get("email") and legacy_lead.get("business"):
-                        legacy_leads.append(legacy_lead)
+                    # Basic sanity: must have email and business name
+                    if not (legacy_lead.get("email") and legacy_lead.get("business")):
+                        continue
+
+                    # Pre-submission gateway field check — avoids burning rejection credits
+                    missing = validate_lead_for_gateway(legacy_lead)
+                    if missing:
+                        print(
+                            f"⚠️ Skipping lead '{legacy_lead.get('business')}' "
+                            f"— missing gateway fields: {missing}"
+                        )
+                        continue
+
+                    legacy_leads.append(legacy_lead)
 
                 except Exception as e:
                     print(f"⚠️ Error converting lead record: {e}")
