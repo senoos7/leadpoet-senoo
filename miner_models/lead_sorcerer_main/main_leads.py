@@ -346,67 +346,66 @@ else:
                             )
                             return []
 
-                        # Extract leads from the result - look in exports directory
+                        # Extract leads from the result - look in exports directory.
+                        # Exports are written to effective_data_dir (stable or temp).
                         leads = []
 
-                        # Look for exported leads in the exports directory
-                        exports_dir = Path(temp_dir) / "exports"
-                        if exports_dir.exists():
-                            # Find the most recent export directory
+                        for search_dir in [effective_data_dir, temp_dir]:
+                            exports_dir = Path(search_dir) / "exports"
+                            if not exports_dir.exists():
+                                continue
                             export_dirs = list(exports_dir.glob("*/*"))
-                            if export_dirs:
-                                latest_export = max(
-                                    export_dirs,
-                                    key=lambda x: x.stat().st_mtime)
-                                leads_file = latest_export / "leads.jsonl"
+                            if not export_dirs:
+                                continue
+                            latest_export = max(
+                                export_dirs,
+                                key=lambda x: x.stat().st_mtime,
+                            )
+                            leads_file = latest_export / "leads.jsonl"
+                            if not leads_file.exists():
+                                continue
+                            print(f"📂 Reading leads from: {leads_file}")
+                            with open(leads_file, "r") as f:
+                                for line in f:
+                                    if not line.strip():
+                                        continue
+                                    try:
+                                        lead_record = json.loads(line)
+                                        has_contacts = (
+                                            lead_record.get("contacts")
+                                            and len(lead_record.get("contacts", [])) > 0
+                                        )
+                                        if has_contacts and len(leads) < num_leads:
+                                            leads.append(lead_record)
+                                    except json.JSONDecodeError:
+                                        continue
+                            if leads:
+                                break  # Found leads — no need to check temp_dir
 
-                                if leads_file.exists():
-                                    with open(leads_file, "r") as f:
-                                        for line in f:
-                                            if line.strip():
-                                                try:
-                                                    lead_record = json.loads(
-                                                        line)
-                                                    # Include leads that have contacts
-                                                    if (lead_record.get(
-                                                            "contacts"
-                                                    ) and len(
-                                                            lead_record.get(
-                                                                "contacts",
-                                                                [])) > 0
-                                                            and len(leads)
-                                                            < num_leads):
-                                                        leads.append(
-                                                            lead_record)
-                                                except json.JSONDecodeError:
-                                                    continue
-
-                        # Fallback: also check the traditional locations
+                        # Fallback: domain_pass.jsonl in either dir
                         if not leads:
-                            domain_pass_file = Path(
-                                temp_dir) / "domain_pass.jsonl"
-
-                            # Try to read from domain results
-                            if domain_pass_file.exists():
+                            for search_dir in [effective_data_dir, temp_dir]:
+                                domain_pass_file = Path(search_dir) / "domain_pass.jsonl"
+                                if not domain_pass_file.exists():
+                                    continue
                                 with open(domain_pass_file, "r") as f:
                                     for line in f:
-                                        if line.strip():
-                                            try:
-                                                lead_record = json.loads(line)
-                                                # Only include leads that passed ICP checks and have contacts
-                                                if (lead_record.get(
-                                                        "icp",
-                                                    {}).get("pre_pass")
-                                                        and lead_record.get(
-                                                            "contacts")
-                                                        and len(leads)
-                                                        < num_leads):
-                                                    leads.append(lead_record)
-                                            except json.JSONDecodeError:
-                                                continue
+                                        if not line.strip():
+                                            continue
+                                        try:
+                                            lead_record = json.loads(line)
+                                            if (
+                                                lead_record.get("icp", {}).get("pre_pass")
+                                                and lead_record.get("contacts")
+                                                and len(leads) < num_leads
+                                            ):
+                                                leads.append(lead_record)
+                                        except json.JSONDecodeError:
+                                            continue
+                                if leads:
+                                    break
 
-                        return leads[:
-                                     num_leads]  # Return only the requested number
+                        return leads[:num_leads]
 
                 except Exception as e:
                     print(f"❌ Error running Lead Sorcerer pipeline: {e}")
