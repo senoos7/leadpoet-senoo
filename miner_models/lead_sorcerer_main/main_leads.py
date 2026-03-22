@@ -101,35 +101,160 @@ else:
             f"Lead Sorcerer wrapper: required icp_config.json not found or unreadable "
             f"at {ICP_TEMPLATE_PATH}. Error: {e}") from e
 
+    # ---------------------------------------------------------------------------
+    # ICP rotation table — one entry per underserved niche.
+    #
+    # Strategy: with 4.4M+ leads already in the subnet, popular sectors
+    # (cybersecurity, generic AI) have near-100% duplicate rates.  Rotating
+    # across niches that other miners ignore maximises unique submissions.
+    #
+    # Rotation cadence: one niche per 6-hour window (matches domain_serp_ttl_hours)
+    # so every SERP cache expiry lands on a fresh sector.  Full cycle = 36 hours.
+    # ---------------------------------------------------------------------------
+    _NICHE_ROTATION = [
+        # ── 0: LegalTech ────────────────────────────────────────────────────────
+        {
+            "name": "B2B LegalTech Startups",
+            "icp_text": (
+                "B2B legaltech, contract management, e-discovery, and compliance "
+                "SaaS startups with 5-300 employees, founded after 2015, based in "
+                "the US or UK. Target founders or C-suite with contact info on site."
+            ),
+            "queries": [
+                "legaltech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "contract management OR e-discovery startup \"co-founder\" email \"about\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
+                "legal SaaS startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:github.com -site:medium.com",
+                "compliance technology startup \"meet the team\" OR \"our founders\" email -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "legaltech B2B startup founder \"San Francisco\" OR \"New York\" OR \"Chicago\" email -site:linkedin.com -site:crunchbase.com",
+            ],
+        },
+        # ── 1: ClimaTech / GreenTech ────────────────────────────────────────────
+        {
+            "name": "B2B ClimaTech Startups",
+            "icp_text": (
+                "B2B climate technology, sustainability SaaS, carbon accounting, "
+                "and clean energy software startups with 5-500 employees, founded "
+                "after 2016, US/EU-based. Target founders with public contact info."
+            ),
+            "queries": [
+                "climatetech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "carbon accounting OR ESG software startup \"co-founder\" email \"about\" -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "clean energy SaaS startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:github.com",
+                "sustainability technology B2B startup founder email \"team\" OR \"about us\" -site:linkedin.com -site:crunchbase.com -site:medium.com",
+                "greentech startup \"co-founder\" email \"Austin\" OR \"Denver\" OR \"Seattle\" OR \"London\" -site:linkedin.com -site:crunchbase.com",
+            ],
+        },
+        # ── 2: LogisticsTech / Supply Chain ─────────────────────────────────────
+        {
+            "name": "B2B LogisticsTech Startups",
+            "icp_text": (
+                "B2B logistics technology, freight, supply chain visibility, and "
+                "last-mile delivery SaaS startups with 10-500 employees, founded "
+                "after 2015. Target US-based founders with public email."
+            ),
+            "queries": [
+                "logistics technology startup CEO founder email \"contact\" site:*.io OR site:*.com -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "supply chain SaaS startup \"co-founder\" email \"about\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "freight tech OR last-mile startup founder CEO email 2020 OR 2021 OR 2022 -site:linkedin.com -site:github.com -site:medium.com",
+                "warehouse management OR fleet management startup founder email \"meet the team\" -site:linkedin.com -site:crunchbase.com",
+                "logistics SaaS \"co-founder\" email \"Chicago\" OR \"Dallas\" OR \"Atlanta\" OR \"Houston\" -site:linkedin.com -site:crunchbase.com",
+            ],
+        },
+        # ── 3: ConstructionTech / PropTech ──────────────────────────────────────
+        {
+            "name": "B2B ConstructionTech and PropTech Startups",
+            "icp_text": (
+                "B2B construction technology (AEC), property management SaaS, "
+                "and real estate tech startups with 5-300 employees, founded after "
+                "2015. Target founders with public email addresses."
+            ),
+            "queries": [
+                "constructiontech OR contech startup CEO founder email \"contact\" site:*.io OR site:*.com -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "proptech startup \"co-founder\" email \"about us\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
+                "AEC software OR construction SaaS startup founder email 2020 OR 2021 OR 2022 -site:linkedin.com -site:medium.com",
+                "real estate technology B2B startup founder CEO \"meet the team\" email -site:linkedin.com -site:crunchbase.com",
+                "proptech startup \"co-founder\" email \"New York\" OR \"Miami\" OR \"Austin\" OR \"Phoenix\" -site:linkedin.com",
+            ],
+        },
+        # ── 4: AgriTech / FoodTech ──────────────────────────────────────────────
+        {
+            "name": "B2B AgriTech and FoodTech Startups",
+            "icp_text": (
+                "B2B agriculture technology, precision farming, food supply chain, "
+                "and restaurant/food service SaaS startups with 5-200 employees, "
+                "founded after 2015. Target founders with public contact info."
+            ),
+            "queries": [
+                "agritech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "precision agriculture OR food tech B2B startup \"co-founder\" email \"about\" -site:linkedin.com -site:crunchbase.com -site:medium.com",
+                "agriculture SaaS startup founder CEO email 2020 OR 2021 OR 2022 \"contact us\" -site:linkedin.com -site:github.com",
+                "foodtech OR restaurant technology startup founder email \"meet the team\" -site:linkedin.com -site:crunchbase.com",
+                "agritech startup \"co-founder\" email \"Iowa\" OR \"Kansas\" OR \"Nebraska\" OR \"Minnesota\" -site:linkedin.com",
+            ],
+        },
+        # ── 5: HRTech / WorkforceTech ───────────────────────────────────────────
+        {
+            "name": "B2B HRTech Startups",
+            "icp_text": (
+                "B2B HR technology, talent acquisition, employee engagement, and "
+                "workforce management SaaS startups with 10-500 employees, founded "
+                "after 2016. Target US founders with public email addresses."
+            ),
+            "queries": [
+                "hrtech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "talent acquisition OR employee engagement SaaS startup \"co-founder\" email \"about\" -site:linkedin.com -site:crunchbase.com",
+                "workforce management startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:medium.com",
+                "HR software B2B startup founder \"meet the team\" OR \"our founders\" email -site:linkedin.com -site:crunchbase.com",
+                "hrtech startup \"co-founder\" email \"Phoenix\" OR \"Salt Lake City\" OR \"Nashville\" OR \"Raleigh\" -site:linkedin.com",
+            ],
+        },
+    ]
+
     def create_industry_specific_config(
             industry: str | None = None) -> Dict[str, Any]:
         """
-        Clone the canonical icp_config.json and (optionally) tweak `icp_text`
-        and `queries` if the caller requested a specific industry.
+        Clone the canonical icp_config.json and apply a rotating niche strategy.
 
-        NOTE: There is deliberately NO generic default – if the template file
-        is absent we abort early.
+        With 4.4M+ leads already in the subnet, generic/popular sectors have
+        near-100% duplicate rates.  This function selects a different underserved
+        niche every 6 hours (matching domain_serp_ttl_hours) so the miner always
+        searches in fresh territory across the full 36-hour rotation cycle.
+
+        If a specific `industry` string is passed (from the validator task) it
+        overrides the rotation with a best-match niche.
         """
+        import time
         config = json.loads(json.dumps(BASE_ICP_CONFIG))  # deep-copy
 
-        if not industry:
-            return config
+        # ── Determine which niche to use ────────────────────────────────────────
+        if industry:
+            ind = industry.lower()
+            # Match caller-supplied industry to the closest niche
+            if any(k in ind for k in ("legal", "contract", "compliance", "ediscovery")):
+                niche = _NICHE_ROTATION[0]
+            elif any(k in ind for k in ("climate", "green", "carbon", "esg", "clean")):
+                niche = _NICHE_ROTATION[1]
+            elif any(k in ind for k in ("logistic", "supply", "freight", "warehouse", "fleet")):
+                niche = _NICHE_ROTATION[2]
+            elif any(k in ind for k in ("construct", "proptech", "real estate", "aec", "property")):
+                niche = _NICHE_ROTATION[3]
+            elif any(k in ind for k in ("agri", "food", "farm", "agriculture")):
+                niche = _NICHE_ROTATION[4]
+            elif any(k in ind for k in ("hr", "human resource", "talent", "workforce")):
+                niche = _NICHE_ROTATION[5]
+            else:
+                # Unknown industry — fall through to time-based rotation
+                niche = _NICHE_ROTATION[int(time.time() // (6 * 3600)) % len(_NICHE_ROTATION)]
+        else:
+            # Automatic 6-hour rotation: epoch // 21600 cycles through all niches
+            slot = int(time.time() // (6 * 3600)) % len(_NICHE_ROTATION)
+            niche = _NICHE_ROTATION[slot]
+            print(f"🔄 ICP niche rotation slot {slot}: '{niche['name']}'")
 
-        ind = industry.lower()
-
-        # minimal heuristic tweak (keeps the rest of the template intact)
-        if any(k in ind for k in ("tech", "software", "ai")):
-            config["icp_text"] = "Technology companies needing contacts."
-            config["queries"] = ["technology company contact information"]
-        elif any(k in ind for k in ("finance", "fintech", "bank")):
-            config[
-                "icp_text"] = "Finance / FinTech organisations needing contacts."
-            config["queries"] = ["fintech company contact information"]
-        elif any(k in ind for k in ("health", "med", "clinic")):
-            config[
-                "icp_text"] = "Healthcare & wellness businesses needing contacts."
-            config["queries"] = ["healthcare company contact information"]
-        # add more branches as desired …
+        # Apply the selected niche onto the base config template
+        config["name"] = niche["name"]
+        config["icp_text"] = niche["icp_text"]
+        config["queries"] = niche["queries"]
 
         return config
 
@@ -208,6 +333,46 @@ else:
         "IN": "India", "SG": "Singapore", "IL": "Israel",
     }
 
+    # US state abbreviation → full name (needed for gateway "state" field on US leads).
+    _US_STATES = {
+        "AL": "Alabama", "AK": "Alaska", "AZ": "Arizona", "AR": "Arkansas",
+        "CA": "California", "CO": "Colorado", "CT": "Connecticut", "DE": "Delaware",
+        "FL": "Florida", "GA": "Georgia", "HI": "Hawaii", "ID": "Idaho",
+        "IL": "Illinois", "IN": "Indiana", "IA": "Iowa", "KS": "Kansas",
+        "KY": "Kentucky", "LA": "Louisiana", "ME": "Maine", "MD": "Maryland",
+        "MA": "Massachusetts", "MI": "Michigan", "MN": "Minnesota", "MS": "Mississippi",
+        "MO": "Missouri", "MT": "Montana", "NE": "Nebraska", "NV": "Nevada",
+        "NH": "New Hampshire", "NJ": "New Jersey", "NM": "New Mexico", "NY": "New York",
+        "NC": "North Carolina", "ND": "North Dakota", "OH": "Ohio", "OK": "Oklahoma",
+        "OR": "Oregon", "PA": "Pennsylvania", "RI": "Rhode Island", "SC": "South Carolina",
+        "SD": "South Dakota", "TN": "Tennessee", "TX": "Texas", "UT": "Utah",
+        "VT": "Vermont", "VA": "Virginia", "WA": "Washington", "WV": "West Virginia",
+        "WI": "Wisconsin", "WY": "Wyoming", "DC": "District of Columbia",
+    }
+
+    # Employee count strings Firecrawl hallucinates that are not valid gateway ranges.
+    _INVALID_EMPLOYEE_COUNTS = {
+        "unknown", "not mentioned", "not specified", "n/a", "none", "",
+        "null", "undefined", "various", "multiple",
+    }
+
+    # Placeholder / hallucinated contact names that Firecrawl invents when it
+    # cannot find a real person.  These will be rejected by source provenance.
+    _FAKE_NAMES = {
+        "john doe", "jane doe", "john smith", "jane smith",
+        "mike johnson", "michael johnson", "sarah connor", "sarah conner",
+        "david lastname", "test user", "first last", "firstname lastname",
+        "sample user", "dummy user", "placeholder", "unknown user",
+    }
+
+    # Generic / shared-inbox prefixes that are never personal emails.
+    _GENERIC_EMAIL_PREFIXES = {
+        "contact", "info", "hello", "hey", "hi", "support", "help",
+        "admin", "team", "office", "enquiry", "inquiry", "mail",
+        "sales", "marketing", "hr", "noreply", "no-reply", "privacy",
+        "legal", "billing", "accounts", "press", "media", "pr",
+    }
+
     def _parse_hq_location(hq_location: str):
         """
         Split a free-text hq_location string into (city, state, country).
@@ -218,8 +383,11 @@ else:
           "London, UK"
           "Tel Aviv, Israel"
           "Berlin, Germany"
+
+        Returns ("", "", "") for sentinel values like "Unknown" or "Not mentioned".
         """
-        if not hq_location:
+        _INVALID_LOCATIONS = {"unknown", "not mentioned", "not specified", "n/a", "none", "somewhere"}
+        if not hq_location or hq_location.strip().lower() in _INVALID_LOCATIONS:
             return "", "", ""
         parts = [p.strip() for p in hq_location.split(",")]
         city = state = country = ""
@@ -229,9 +397,15 @@ else:
             city, country = parts[0], parts[1]
         else:
             city = parts[0]
-        # Normalize abbreviations (e.g. "USA" → "United States")
+        # Normalize country abbreviations (e.g. "USA" → "United States")
         country_key = country.strip().upper().rstrip(".")
         country = _COUNTRY_NORM.get(country_key, country.strip())
+        # Expand US state abbreviations (e.g. "CA" → "California")
+        state_key = state.strip().upper()
+        state = _US_STATES.get(state_key, state.strip())
+        # If city looks like a known sentinel, clear it
+        if city.lower() in _INVALID_LOCATIONS:
+            city = ""
         return city.strip(), state.strip(), country.strip()
 
     def convert_lead_record_to_legacy_format(
@@ -262,33 +436,42 @@ else:
         # Extract contact information
         if best_contact:
             # Handle both full_name (from crawl tool) and first_name/last_name (legacy)
-            full_name = best_contact.get("full_name") or ""
-            first_name = best_contact.get("first_name") or ""
-            last_name = best_contact.get("last_name") or ""
+            raw_name = (best_contact.get("full_name") or "").strip()
+            first_name = (best_contact.get("first_name") or "").strip()
+            last_name = (best_contact.get("last_name") or "").strip()
 
             # If we have full_name but not first/last, try to split
-            if full_name and not (first_name or last_name):
-                name_parts = full_name.split(maxsplit=1)
+            if raw_name and not (first_name or last_name):
+                name_parts = raw_name.split(maxsplit=1)
                 first_name = name_parts[0] if len(name_parts) > 0 else ""
                 last_name = name_parts[1] if len(name_parts) > 1 else ""
             # If we have first/last but not full_name, combine them
-            elif not full_name and (first_name or last_name):
-                full_name = f"{first_name} {last_name}".strip()
+            elif not raw_name and (first_name or last_name):
+                raw_name = f"{first_name} {last_name}".strip()
 
-            email = best_contact.get("email") or ""
+            # Proper-case names (Firecrawl often returns lowercase)
+            first_name = first_name.title()
+            last_name = last_name.title()
+            full_name = f"{first_name} {last_name}".strip() if (first_name or last_name) else raw_name.title()
+
+            email = (best_contact.get("email") or "").strip().lower()
             # Handle both 'role' (from crawl tool) and 'job_title' (legacy)
-            job_title = best_contact.get("role") or best_contact.get(
-                "job_title") or ""
+            job_title = best_contact.get("role") or best_contact.get("job_title") or ""
+            # Title-case the role as well
+            job_title = job_title.title() if job_title else ""
+
             # Extract LinkedIn URL (can be full URL or path like "/in/username")
             linkedin_raw = best_contact.get("linkedin") or best_contact.get("linkedin_url") or ""
             # Normalize to full URL if it's just a path
             if linkedin_raw and linkedin_raw.startswith("/in/"):
                 linkedin = f"https://www.linkedin.com{linkedin_raw}"
+            elif linkedin_raw and linkedin_raw.startswith("in/"):
+                linkedin = f"https://www.linkedin.com/{linkedin_raw}"
             elif linkedin_raw and not linkedin_raw.startswith("http"):
-                linkedin = f"https://www.linkedin.com/in/{linkedin_raw}"
+                linkedin = f"https://www.linkedin.com/in/{linkedin_raw.lstrip('/')}"
             else:
                 linkedin = linkedin_raw
-            
+
             # Fallback to default LinkedIn from ICP config if not found
             if not linkedin and BASE_ICP_CONFIG.get("default_contact_linkedin"):
                 linkedin = BASE_ICP_CONFIG["default_contact_linkedin"]
@@ -312,6 +495,12 @@ else:
         hq_location = safe_str(company.get("hq_location"))
         city, state, country = _parse_hq_location(hq_location)
 
+        # Fall back to the ICP default_country when Firecrawl returned "Unknown".
+        if not country:
+            default_country = BASE_ICP_CONFIG.get("default_country", "United States")
+            # Expand "US" shorthand stored in some ICP configs
+            country = _COUNTRY_NORM.get(default_country.upper(), default_country)
+
         # ── Source URL (company website used as provenance anchor) ────────────
         domain = safe_str(lead_record.get("domain"))
         source_url = f"https://{domain}" if domain else ""
@@ -330,7 +519,14 @@ else:
                 company_linkedin = f"https://www.linkedin.com/company/{company_slug}"
 
         # ── Employee count ────────────────────────────────────────────────────
-        employee_count = safe_str(company.get("employee_count"))
+        raw_employee_count = safe_str(company.get("employee_count"))
+        # Map invalid/sentinel values to a gateway-accepted default range.
+        # Valid ranges: "0-1","2-10","11-50","51-200","201-500","501-1,000",
+        #               "1,001-5,000","5,001-10,000","10,001+"
+        if raw_employee_count.lower().strip() in _INVALID_EMPLOYEE_COUNTS:
+            employee_count = "11-50"  # safe default for a startup context
+        else:
+            employee_count = raw_employee_count
 
         # Build the lead dict with all gateway-required fields populated.
         legacy_lead = {
@@ -467,7 +663,10 @@ else:
                                             lead_record.get("contacts")
                                             and len(lead_record.get("contacts", [])) > 0
                                         )
-                                        if has_contacts and len(leads) < num_leads:
+                                        # Load ALL contact-bearing records regardless of
+                                        # num_leads — the get_leads() caller will validate
+                                        # and pick the best ones after conversion.
+                                        if has_contacts:
                                             leads.append(lead_record)
                                     except json.JSONDecodeError:
                                         continue
@@ -489,7 +688,6 @@ else:
                                             if (
                                                 lead_record.get("icp", {}).get("pre_pass")
                                                 and lead_record.get("contacts")
-                                                and len(leads) < num_leads
                                             ):
                                                 leads.append(lead_record)
                                         except json.JSONDecodeError:
@@ -567,6 +765,25 @@ else:
 
                     # Basic sanity: must have email and business name
                     if not (legacy_lead.get("email") and legacy_lead.get("business")):
+                        continue
+
+                    # Reject generic / shared-inbox emails (not personal leads)
+                    email_val = legacy_lead.get("email", "")
+                    email_prefix = email_val.split("@")[0].lower() if "@" in email_val else ""
+                    if email_prefix in _GENERIC_EMAIL_PREFIXES:
+                        print(
+                            f"🚫 Skipping generic email '{email_val}' "
+                            f"for '{legacy_lead.get('business')}'"
+                        )
+                        continue
+
+                    # Reject hallucinated / placeholder names
+                    full_name_check = legacy_lead.get("full_name", "").lower().strip()
+                    if full_name_check in _FAKE_NAMES:
+                        print(
+                            f"🚫 Skipping hallucinated contact '{legacy_lead.get('full_name')}' "
+                            f"for '{legacy_lead.get('business')}'"
+                        )
                         continue
 
                     # Pre-submission gateway field check — avoids burning rejection credits
