@@ -8,6 +8,7 @@ and converts the output to the format expected by the existing miner code.
 import asyncio
 import json
 import os
+import re
 import sys
 import tempfile
 import shutil
@@ -111,101 +112,119 @@ else:
     # Rotation cadence: one niche per 6-hour window (matches domain_serp_ttl_hours)
     # so every SERP cache expiry lands on a fresh sector.  Full cycle = 36 hours.
     # ---------------------------------------------------------------------------
+    # ---------------------------------------------------------------------------
+    # ICP rotation table — built from REAL database gap analysis.
+    #
+    # Queried the subnet's test DB (50k leads sample) to find which industries,
+    # geographies, and roles are UNDERREPRESENTED.  Each slot targets the
+    # biggest gaps to minimise duplicate rate and maximise unique submissions.
+    #
+    # Gap findings (leads per industry in test DB sample):
+    #   Mobile(2), Collaboration(8), Video(10), Apps(12), Navigation(13),
+    #   Consumer Electronics(17), Payments(25), Gaming(33), Sports(39),
+    #   Agriculture(41), Messaging/Telecom(44), Sustainability(64)
+    #
+    # Geographic gaps: Ireland(5), S.Korea(1), Japan(5), Sweden(14),
+    #   Switzerland(6), New Zealand(15) — major tech hubs, almost 0 coverage.
+    #
+    # US state gaps: Wyoming/Montana/Vermont(1 each), Missouri(23), Iowa(32),
+    #   Wisconsin(32), Utah(26), Virginia(29) — almost untouched.
+    # ---------------------------------------------------------------------------
     _NICHE_ROTATION = [
-        # ── 0: LegalTech ────────────────────────────────────────────────────────
+        # ── 0: Mobile / Apps / Collaboration (DB gap: 2-12 leads each) ──────────
         {
-            "name": "B2B LegalTech Startups",
+            "name": "B2B Mobile Apps and Collaboration Software",
             "icp_text": (
-                "B2B legaltech, contract management, e-discovery, and compliance "
-                "SaaS startups with 5-300 employees, founded after 2015, based in "
-                "the US or UK. Target founders or C-suite with contact info on site."
+                "B2B mobile platform, enterprise app development, and collaboration "
+                "software startups with 10-500 employees, US-based, founded after "
+                "2015. Target CEO, Co-Founder, or CTO with contact info on site."
             ),
             "queries": [
-                "legaltech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "contract management OR e-discovery startup \"co-founder\" email \"about\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
-                "legal SaaS startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:github.com -site:medium.com",
-                "compliance technology startup \"meet the team\" OR \"our founders\" email -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "legaltech B2B startup founder \"San Francisco\" OR \"New York\" OR \"Chicago\" email -site:linkedin.com -site:crunchbase.com",
+                "B2B mobile platform startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
+                "collaboration software startup \"co-founder\" email \"about\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
+                "enterprise mobile app startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:medium.com",
+                "team collaboration OR workplace productivity startup founder email \"meet the team\" -site:linkedin.com -site:crunchbase.com",
+                "mobile SaaS startup \"co-founder\" email \"Utah\" OR \"Virginia\" OR \"Wisconsin\" OR \"Missouri\" -site:linkedin.com -site:crunchbase.com",
             ],
         },
-        # ── 1: ClimaTech / GreenTech ────────────────────────────────────────────
+        # ── 1: Gaming / Sports Tech (DB gap: 33 and 39 leads respectively) ──────
         {
-            "name": "B2B ClimaTech Startups",
+            "name": "B2B Gaming and Sports Technology",
             "icp_text": (
-                "B2B climate technology, sustainability SaaS, carbon accounting, "
-                "and clean energy software startups with 5-500 employees, founded "
-                "after 2016, US/EU-based. Target founders with public contact info."
+                "B2B gaming technology, esports platforms, sports analytics, and "
+                "fan engagement software startups with 10-300 employees, founded "
+                "after 2016. Target founders/CEOs with public email addresses."
             ),
             "queries": [
-                "climatetech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "carbon accounting OR ESG software startup \"co-founder\" email \"about\" -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "clean energy SaaS startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:github.com",
-                "sustainability technology B2B startup founder email \"team\" OR \"about us\" -site:linkedin.com -site:crunchbase.com -site:medium.com",
-                "greentech startup \"co-founder\" email \"Austin\" OR \"Denver\" OR \"Seattle\" OR \"London\" -site:linkedin.com -site:crunchbase.com",
+                "game studio OR esports startup CEO founder email \"contact\" site:*.io OR site:*.com -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "sports technology startup \"co-founder\" email \"about\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
+                "gaming SaaS OR game development tools startup founder CEO email 2020 OR 2021 OR 2022 -site:linkedin.com -site:medium.com",
+                "sports analytics OR fan engagement startup founder email \"meet the team\" -site:linkedin.com -site:crunchbase.com",
+                "esports OR sports tech startup \"co-founder\" email \"Los Angeles\" OR \"Las Vegas\" OR \"Nashville\" OR \"Denver\" -site:linkedin.com",
             ],
         },
-        # ── 2: LogisticsTech / Supply Chain ─────────────────────────────────────
+        # ── 2: Payments / Consumer Electronics / Navigation (DB gap: 13-25 leads)
         {
-            "name": "B2B LogisticsTech Startups",
+            "name": "B2B Payments Fintech and Navigation Technology",
             "icp_text": (
-                "B2B logistics technology, freight, supply chain visibility, and "
-                "last-mile delivery SaaS startups with 10-500 employees, founded "
-                "after 2015. Target US-based founders with public email."
-            ),
-            "queries": [
-                "logistics technology startup CEO founder email \"contact\" site:*.io OR site:*.com -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "supply chain SaaS startup \"co-founder\" email \"about\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "freight tech OR last-mile startup founder CEO email 2020 OR 2021 OR 2022 -site:linkedin.com -site:github.com -site:medium.com",
-                "warehouse management OR fleet management startup founder email \"meet the team\" -site:linkedin.com -site:crunchbase.com",
-                "logistics SaaS \"co-founder\" email \"Chicago\" OR \"Dallas\" OR \"Atlanta\" OR \"Houston\" -site:linkedin.com -site:crunchbase.com",
-            ],
-        },
-        # ── 3: ConstructionTech / PropTech ──────────────────────────────────────
-        {
-            "name": "B2B ConstructionTech and PropTech Startups",
-            "icp_text": (
-                "B2B construction technology (AEC), property management SaaS, "
-                "and real estate tech startups with 5-300 employees, founded after "
-                "2015. Target founders with public email addresses."
-            ),
-            "queries": [
-                "constructiontech OR contech startup CEO founder email \"contact\" site:*.io OR site:*.com -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "proptech startup \"co-founder\" email \"about us\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
-                "AEC software OR construction SaaS startup founder email 2020 OR 2021 OR 2022 -site:linkedin.com -site:medium.com",
-                "real estate technology B2B startup founder CEO \"meet the team\" email -site:linkedin.com -site:crunchbase.com",
-                "proptech startup \"co-founder\" email \"New York\" OR \"Miami\" OR \"Austin\" OR \"Phoenix\" -site:linkedin.com",
-            ],
-        },
-        # ── 4: AgriTech / FoodTech ──────────────────────────────────────────────
-        {
-            "name": "B2B AgriTech and FoodTech Startups",
-            "icp_text": (
-                "B2B agriculture technology, precision farming, food supply chain, "
-                "and restaurant/food service SaaS startups with 5-200 employees, "
+                "B2B payments infrastructure, embedded finance, mapping/geospatial "
+                "software, and consumer electronics startups with 10-500 employees, "
                 "founded after 2015. Target founders with public contact info."
             ),
             "queries": [
-                "agritech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "precision agriculture OR food tech B2B startup \"co-founder\" email \"about\" -site:linkedin.com -site:crunchbase.com -site:medium.com",
-                "agriculture SaaS startup founder CEO email 2020 OR 2021 OR 2022 \"contact us\" -site:linkedin.com -site:github.com",
-                "foodtech OR restaurant technology startup founder email \"meet the team\" -site:linkedin.com -site:crunchbase.com",
-                "agritech startup \"co-founder\" email \"Iowa\" OR \"Kansas\" OR \"Nebraska\" OR \"Minnesota\" -site:linkedin.com",
+                "payments fintech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "embedded finance OR payment processing startup \"co-founder\" email \"about\" -site:linkedin.com -site:crunchbase.com -site:medium.com",
+                "geospatial OR mapping software B2B startup founder CEO email 2021 OR 2022 -site:linkedin.com -site:medium.com",
+                "consumer electronics B2B startup founder \"meet the team\" OR \"our founders\" email -site:linkedin.com -site:crunchbase.com",
+                "fintech payments startup \"co-founder\" email \"Salt Lake City\" OR \"Iowa\" OR \"Nebraska\" OR \"Wisconsin\" -site:linkedin.com",
             ],
         },
-        # ── 5: HRTech / WorkforceTech ───────────────────────────────────────────
+        # ── 3: MarTech / SalesTech (DB gap: "Sales And Marketing" had only 31 leads)
         {
-            "name": "B2B HRTech Startups",
+            "name": "B2B MarTech and Sales Technology Startups",
             "icp_text": (
-                "B2B HR technology, talent acquisition, employee engagement, and "
-                "workforce management SaaS startups with 10-500 employees, founded "
-                "after 2016. Target US founders with public email addresses."
+                "B2B marketing technology, sales automation, revenue intelligence, "
+                "and ad-tech SaaS startups with 10-500 employees, US-based, founded "
+                "after 2016. Target CEO, Co-Founder, or VP Sales with public email."
             ),
             "queries": [
-                "hrtech startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
-                "talent acquisition OR employee engagement SaaS startup \"co-founder\" email \"about\" -site:linkedin.com -site:crunchbase.com",
-                "workforce management startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:medium.com",
-                "HR software B2B startup founder \"meet the team\" OR \"our founders\" email -site:linkedin.com -site:crunchbase.com",
-                "hrtech startup \"co-founder\" email \"Phoenix\" OR \"Salt Lake City\" OR \"Nashville\" OR \"Raleigh\" -site:linkedin.com",
+                "martech startup CEO founder email \"contact\" site:*.io OR site:*.ai United States -site:linkedin.com -site:github.com -site:crunchbase.com -site:medium.com",
+                "sales automation OR revenue intelligence startup \"co-founder\" email \"about\" OR \"team\" -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "B2B advertising technology startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" United States -site:linkedin.com -site:medium.com",
+                "marketing SaaS startup founder \"meet the team\" email \"Minnesota\" OR \"Missouri\" OR \"Iowa\" OR \"Wisconsin\" -site:linkedin.com -site:crunchbase.com",
+                "sales tech OR revenue ops startup \"co-founder\" email \"Atlanta\" OR \"Charlotte\" OR \"Indianapolis\" OR \"Columbus\" -site:linkedin.com -site:crunchbase.com",
+            ],
+        },
+        # ── 4: Video / Messaging / Internet Services (DB gap: 8-10 leads each) ──
+        {
+            "name": "B2B Video and Messaging Platform Startups",
+            "icp_text": (
+                "B2B video streaming, messaging infrastructure, communication API, "
+                "and internet services startups with 10-300 employees, founded after "
+                "2016. Target founders with contact info publicly listed on site."
+            ),
+            "queries": [
+                "B2B video platform startup CEO founder email \"contact\" site:*.io OR site:*.ai -site:linkedin.com -site:github.com -site:crunchbase.com",
+                "messaging API OR communication infrastructure startup \"co-founder\" email \"about\" -site:linkedin.com -site:crunchbase.com -site:medium.com",
+                "video streaming SaaS startup founder CEO email 2021 OR 2022 OR 2023 \"contact us\" -site:linkedin.com -site:medium.com",
+                "internet services OR CDN startup founder \"meet the team\" email -site:linkedin.com -site:crunchbase.com",
+                "telecom OR messaging startup \"co-founder\" email \"Montana\" OR \"Wyoming\" OR \"Idaho\" OR \"New Mexico\" -site:linkedin.com",
+            ],
+        },
+        # ── 5: Underrepresented US States — any B2B tech (DB gap: 1-32 leads) ───
+        {
+            "name": "B2B Tech Startups in Underrepresented US States",
+            "icp_text": (
+                "B2B technology, SaaS, and software startups with 10-500 employees "
+                "based in underrepresented US states: Missouri, Iowa, Wisconsin, "
+                "Utah, Virginia, Maryland, Oregon. Target founders with public email."
+            ),
+            "queries": [
+                "B2B SaaS startup CEO founder email \"contact\" \"St. Louis\" OR \"Kansas City\" Missouri -site:linkedin.com -site:crunchbase.com -site:medium.com",
+                "technology startup \"co-founder\" email \"Salt Lake City\" OR \"Provo\" Utah OR \"Richmond\" OR \"Roanoke\" Virginia -site:linkedin.com -site:crunchbase.com",
+                "software startup founder CEO email \"Madison\" OR \"Milwaukee\" Wisconsin OR \"Des Moines\" Iowa \"contact us\" -site:linkedin.com",
+                "B2B tech startup founder email \"Baltimore\" OR \"Annapolis\" Maryland OR \"Portland\" Oregon \"about\" OR \"team\" -site:linkedin.com -site:crunchbase.com",
+                "SaaS startup \"co-founder\" email \"Boise\" Idaho OR \"Albuquerque\" \"New Mexico\" OR \"Providence\" \"Rhode Island\" -site:linkedin.com",
             ],
         },
     ]
@@ -230,17 +249,17 @@ else:
         if industry:
             ind = industry.lower()
             # Match caller-supplied industry to the closest niche
-            if any(k in ind for k in ("legal", "contract", "compliance", "ediscovery")):
+            if any(k in ind for k in ("mobile", "app", "collaboration", "workplace")):
                 niche = _NICHE_ROTATION[0]
-            elif any(k in ind for k in ("climate", "green", "carbon", "esg", "clean")):
+            elif any(k in ind for k in ("gaming", "game", "sport", "esport")):
                 niche = _NICHE_ROTATION[1]
-            elif any(k in ind for k in ("logistic", "supply", "freight", "warehouse", "fleet")):
+            elif any(k in ind for k in ("payment", "fintech", "navigation", "mapping", "geospatial", "electronics")):
                 niche = _NICHE_ROTATION[2]
-            elif any(k in ind for k in ("construct", "proptech", "real estate", "aec", "property")):
+            elif any(k in ind for k in ("ireland", "sweden", "japan", "korea", "europe", "asia", "international")):
                 niche = _NICHE_ROTATION[3]
-            elif any(k in ind for k in ("agri", "food", "farm", "agriculture")):
+            elif any(k in ind for k in ("video", "messaging", "streaming", "telecom", "communication")):
                 niche = _NICHE_ROTATION[4]
-            elif any(k in ind for k in ("hr", "human resource", "talent", "workforce")):
+            elif any(k in ind for k in ("missouri", "iowa", "wisconsin", "utah", "virginia", "maryland", "oregon")):
                 niche = _NICHE_ROTATION[5]
             else:
                 # Unknown industry — fall through to time-based rotation
@@ -365,12 +384,18 @@ else:
         "sample user", "dummy user", "placeholder", "unknown user",
     }
 
-    # Generic / shared-inbox prefixes that are never personal emails.
+    # Generic / shared-inbox prefixes — must match the EXACT list in
+    # automated_checks.py check_general_purpose_email() to avoid Stage 0 rejection.
     _GENERIC_EMAIL_PREFIXES = {
-        "contact", "info", "hello", "hey", "hi", "support", "help",
-        "admin", "team", "office", "enquiry", "inquiry", "mail",
-        "sales", "marketing", "hr", "noreply", "no-reply", "privacy",
-        "legal", "billing", "accounts", "press", "media", "pr",
+        "info", "hello", "owner", "ceo", "founder", "contact", "support",
+        "team", "admin", "office", "mail", "connect", "help", "hi",
+        "welcome", "inquiries", "general", "feedback", "ask", "outreach",
+        "communications", "crew", "staff", "community", "reachus", "talk",
+        "service",
+        # additional prefixes not in validator but still bad quality:
+        "hey", "enquiry", "inquiry", "sales", "marketing", "hr",
+        "noreply", "no-reply", "privacy", "legal", "billing",
+        "accounts", "press", "media", "pr",
     }
 
     def _parse_hq_location(hq_location: str):
@@ -767,6 +792,17 @@ else:
                     if not (legacy_lead.get("email") and legacy_lead.get("business")):
                         continue
 
+                    # Hard block: validators only accept US leads — drop everything else
+                    lead_country = legacy_lead.get("country", "").strip()
+                    if lead_country and lead_country not in (
+                        "United States", "US", "USA", "U.S.", "U.S.A."
+                    ):
+                        print(
+                            f"🌍 Skipping non-US lead '{legacy_lead.get('business')}' "
+                            f"(country: {lead_country})"
+                        )
+                        continue
+
                     # Reject generic / shared-inbox emails (not personal leads)
                     email_val = legacy_lead.get("email", "")
                     email_prefix = email_val.split("@")[0].lower() if "@" in email_val else ""
@@ -783,6 +819,35 @@ else:
                         print(
                             f"🚫 Skipping hallucinated contact '{legacy_lead.get('full_name')}' "
                             f"for '{legacy_lead.get('business')}'"
+                        )
+                        continue
+
+                    # Stage 0 mirror: name must appear in email local part
+                    # (replicates check_name_email_match from automated_checks.py)
+                    _email_val = legacy_lead.get("email", "")
+                    _first = re.sub(r'[^a-z0-9]', '', legacy_lead.get("first", "").lower())
+                    _last  = re.sub(r'[^a-z0-9]', '', legacy_lead.get("last", "").lower())
+                    _local = re.sub(r'[^a-z0-9]', '', _email_val.split("@")[0].lower()) if "@" in _email_val else ""
+                    _MIN = 3
+                    _patterns = [p for p in [
+                        _first, _last,
+                        f"{_first}{_last}",
+                        f"{_first[:1]}{_last}" if _first else "",
+                        f"{_last}{_first[:1]}" if _first else "",
+                    ] if len(p) >= _MIN]
+                    _name_ok = any(p in _local for p in _patterns)
+                    # Also allow prefix match (e.g. "greg" → "gregory")
+                    if not _name_ok and len(_local) >= _MIN:
+                        _name_ok = (
+                            (_first and _first.startswith(_local)) or
+                            (_last  and _last.startswith(_local))  or
+                            (_first and _local.startswith(_first[:_MIN])) or
+                            (_last  and _local.startswith(_last[:_MIN]))
+                        )
+                    if not _name_ok:
+                        print(
+                            f"🚫 Skipping '{legacy_lead.get('full_name')}' — "
+                            f"name not in email '{_email_val}' (Stage 0 would reject)"
                         )
                         continue
 

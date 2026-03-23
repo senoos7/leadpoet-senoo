@@ -62,7 +62,7 @@
   "exports": {
     "enabled": true
   },
-  "default_country": "US",
+  "default_country": "United States",
   "exclusion_criteria": {
     "ownership_types": [],
     "max_locations": 10000,
@@ -87,7 +87,8 @@
     "location_types": ["headquarters", "single_location"],
     "company_sizes": ["small", "mid-market"],
     "ownership_models": ["private"],
-    "geographic_focus": ["North America", "United States"]
+    "geographic_focus": ["United States"],
+    "required_country": "United States"
   },
   "intent_config": {
     "purpose": "startup_advisory",
