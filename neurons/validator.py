@@ -3343,19 +3343,31 @@ class Validator(BaseValidatorNeuron):
             
             # ═══════════════════════════════════════════════════════════════════
             # Step 1: Convert floats to u16 using canonical function
+            # CRITICAL FIX: Bittensor's convert_weights_and_uids_for_emit removes
+            # zero-weight UIDs, so we must filter BEFORE calling normalize_to_u16
+            # to ensure UIDs and weights stay aligned.
             # ═══════════════════════════════════════════════════════════════════
-            weights_u16 = normalize_to_u16(uids, weights)
             
-            # Filter to sparse (remove zeros) and ensure sorted
-            sparse_pairs = [(uid, w) for uid, w in zip(uids, weights_u16) if w > 0]
-            sparse_pairs.sort(key=lambda x: x[0])  # Sort by UID
-            
-            if not sparse_pairs:
-                bt.logging.warning("⚠️ No non-zero weights after u16 conversion")
+            # First, filter out zero weights to keep UIDs aligned with weights
+            non_zero_pairs = [(uid, w) for uid, w in zip(uids, weights) if w > 0]
+            if not non_zero_pairs:
+                bt.logging.warning("⚠️ No non-zero weights to submit")
                 return None
             
-            sparse_uids = [p[0] for p in sparse_pairs]
-            sparse_weights_u16 = [p[1] for p in sparse_pairs]
+            non_zero_pairs.sort(key=lambda x: x[0])  # Sort by UID
+            filtered_uids = [p[0] for p in non_zero_pairs]
+            filtered_weights = [p[1] for p in non_zero_pairs]
+            
+            # Now convert to u16 - all weights are non-zero so no UID removal will occur
+            weights_u16 = normalize_to_u16(filtered_uids, filtered_weights)
+            
+            # Verify lengths match (sanity check)
+            if len(filtered_uids) != len(weights_u16):
+                bt.logging.error(f"⚠️ UID/weight length mismatch after u16 conversion: {len(filtered_uids)} vs {len(weights_u16)}")
+                return None
+            
+            sparse_uids = filtered_uids
+            sparse_weights_u16 = weights_u16
             
             # ═══════════════════════════════════════════════════════════════════
             # Step 2: Sign weights with enclave key
@@ -5814,25 +5826,83 @@ class Validator(BaseValidatorNeuron):
                 try:
                     with open(results_file, 'r') as f:
                         worker_data = json.load(f)
-                    all_results.extend(worker_data.get("model_results", []))
+                    worker_results = worker_data.get("model_results", [])
+                    all_results.extend(worker_results)
                     completed_workers.add(worker_id)
+                    # Clear failure counts for successfully evaluated models
+                    fail_tracker_path = weights_dir / "qual_eval_failure_counts.json"
+                    try:
+                        with open(fail_tracker_path, 'r') as f:
+                            fail_counts = json.load(f)
+                        changed = False
+                        for r in worker_results:
+                            mid = r.get("model_id", "")
+                            if mid in fail_counts:
+                                del fail_counts[mid]
+                                changed = True
+                        if changed:
+                            with open(fail_tracker_path, 'w') as f:
+                                json.dump(fail_counts, f)
+                    except (FileNotFoundError, json.JSONDecodeError):
+                        pass
                 except Exception as e:
                     print(f"   ⚠️ Error reading results from worker {worker_id}: {e}")
         
         all_done = (completed_workers == expected_workers)
         
         # If force_submit (block 335 cutoff or epoch window expired), clear work files
-        # for incomplete workers so they can process models in the next cycle
+        # for incomplete workers so they can process models in the next cycle.
+        # Track per-model failure counts — if a model fails 3+ times, score it 0.
         if force_submit and not all_done:
             incomplete_workers = expected_workers - completed_workers
             print(f"   ⚠️ Force cutoff - clearing {len(incomplete_workers)} incomplete worker(s): {sorted(incomplete_workers)}")
+
+            fail_tracker_path = weights_dir / "qual_eval_failure_counts.json"
+            try:
+                with open(fail_tracker_path, 'r') as f:
+                    fail_counts = json.load(f)
+            except (FileNotFoundError, json.JSONDecodeError):
+                fail_counts = {}
+
+            MAX_EVAL_FAILURES = 3
+
             for worker_id in incomplete_workers:
                 work_file = weights_dir / f"qual_worker_{worker_id}_work_{current_epoch}.json"
+                try:
+                    with open(work_file, 'r') as f:
+                        work_data = json.load(f)
+                    for model in work_data.get("models", []):
+                        mid = model.get("model_id", "")
+                        if mid:
+                            fail_counts[mid] = fail_counts.get(mid, 0) + 1
+                            mname = model.get("model_name", "unknown")
+                            count = fail_counts[mid]
+                            print(f"      📊 Model {mname} ({mid[:8]}...): eval failure #{count}")
+                            if count >= MAX_EVAL_FAILURES:
+                                print(f"      ❌ Model {mname} failed {count} times — marking as score 0")
+                                all_results.append({
+                                    "model_id": mid,
+                                    "model_name": mname,
+                                    "miner_hotkey": model.get("miner_hotkey", "unknown"),
+                                    "avg_score": 0.0,
+                                    "total_cost_usd": 0.0,
+                                    "total_time_seconds": 0.0,
+                                    "is_rebenchmark": model.get("is_rebenchmark", False),
+                                    "error": f"Model failed evaluation {count} consecutive times (worker timeout/crash)",
+                                    "score_breakdown": {"status": "eval_timeout", "failures": count, "version": 1},
+                                })
+                                del fail_counts[mid]
+                except (FileNotFoundError, json.JSONDecodeError):
+                    pass
                 try:
                     work_file.unlink()
                     print(f"      🗑️ Cleared work file for Qual Worker {worker_id}")
                 except Exception as e:
                     print(f"      ⚠️ Failed to clear work file for Qual Worker {worker_id}: {e}")
+
+            with open(fail_tracker_path, 'w') as f:
+                json.dump(fail_counts, f)
+
             print(f"   ℹ️ Models from incomplete workers will be re-evaluated next cycle (status stays 'submitted')")
         
         # Log collection status
